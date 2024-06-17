@@ -1,0 +1,178 @@
+---
+- hosts: all
+  become: yes
+
+  tasks:
+
+    - name: Install Aptitute
+      apt:
+        name: aptitude
+        state: latest
+        update_cache: true
+
+    - name: "Install Packages (May take a bit :)"
+      ansible.builtin.apt:
+        pkg:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - software-properties-common
+          - python3
+          - pip 
+          - dialog
+        state: latest
+        update_cache: true
+
+    - name: Add Docker's official GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} stable
+        state: present
+
+    - name: Install Docker and related packages
+      ansible.builtin.apt:
+        name: "{{ item }}"
+        state: present
+        update_cache: true
+      loop:
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io
+        - docker-buildx-plugin
+        - docker-compose-plugin
+
+    - name: install python packages
+      ansible.builtin.pip:
+        name:
+          - python-dotenv
+          - requests
+          - pyyaml
+          - pythondialog
+          - urllib3
+          - docker  
+
+    # This task sometimes take forever.....look into this later
+    - name: Git Clone Malcolm
+      retries: 2
+      ansible.builtin.git:
+        repo: https://github.com/cisagov/Malcolm.git
+        clone: true
+        dest: /Malcolm
+        force: true
+
+    - name: change owner of Malcolm to vagrant user 
+      become: true
+      shell:
+        chdir: /Malcolm
+        cmd: "chown -R vagrant:vagrant ."
+
+    - name: Remove lines 2982-2911 from install.py so it doesn't stall
+      become: true 
+      shell:
+        cmd: "sed -i '2892,2911d' /Malcolm/scripts/install.py"
+
+    # This now works after removing the ~20 lines from the previous task, gets python packages
+    - name: Run install.py as vagrant
+      become_user: vagrant
+      ansible.builtin.shell:
+        chdir: /Malcolm/scripts
+        cmd: ./install.py --defaults --restart-malcolm
+
+    - name: add vagrant as docker user
+      become: true
+      shell:
+        cmd: "usermod -a -G docker vagrant"
+
+    ##
+    #### This tries to the same thing as the previous task, trying to make all the option work, still no luck.
+    #### Works now after removing only the "--netbox-preload-prefixes"
+    ##
+    - name: Run configure script
+      become_user: vagrant
+      ansible.builtin.shell:
+        chdir: /Malcolm/scripts/
+        cmd: "python3 /Malcolm/scripts/configure --defaults --restart-malcolm --auto-arkime --auto-suricata --auto-zeek --zeek-ics --zeek-ics-best-guess --auto-oui --auto-freq --file-extraction notcommtxt --file-preservation quarantined --extracted-file-server --extracted-file-server-password infected --extracted-file-server-zip --extracted-file-capa --extracted-file-clamav --extracted-file-yara --netbox --netbox-enrich --netbox-autopopulate false --netbox-site-name malcolm"
+
+
+    ##
+    #####   Created this workaround auth script on the VM because ansible for some reason can't run auth_setup without completely breaking it
+    ##
+
+    - name: Creating script because ansible is being stupid with auth_setup
+      become: true
+      ansible.builtin.copy:
+        dest: "/Malcolm/scripts/auth_setup_workaround.sh"
+        content: |
+          #!/bin/bash
+
+          ./auth_setup --auth-noninteractive --auth-admin-username analyst --auth-admin-password-openssl '$1$owXoS5pf$YesZKhhWS0d3zVUUhdcef0' --auth-admin-password-htpasswd '$2y$05$a8jiJsLZ1mFnt5srJD3HAOKC8IUaZcOlsqp8txBlmMjW6wUXUtN3S' --auth-generate-webcerts --auth-generate-fwcerts --auth-generate-netbox-passwords
+
+    - name: make workaround executable
+      become: true
+      ansible.builtin.shell:
+        chdir: /Malcolm/scripts/
+        cmd: chmod +x /Malcolm/scripts/auth_setup_workaround.sh
+
+    - name: Remove lines 2285-2286 from control.py so it doesn't break ansible running auth_setup
+      become: true 
+      shell:
+        cmd: "sed -i '2285,2286d' /Malcolm/scripts/control.py"
+
+    - name: run auth script workaround as vagrant user
+      retries: 10
+      become_user: vagrant 
+      ansible.builtin.shell:
+        chdir: /Malcolm/scripts
+        cmd: ./auth_setup_workaround.sh
+
+    - name: Pull Malcolm docker containers (This will take a few minutes...longer on a slow network)
+      become: true
+      shell:
+        chdir: /Malcolm
+        cmd: "docker compose --profile malcolm pull"
+
+    - name: add vagrant as docker user
+      become: true
+      ansible.builtin.shell:
+        cmd: usermod -a -G docker vagrant
+
+    - name: add root as docker user
+      become: true
+      ansible.builtin.command:
+        cmd: usermod -a -G docker root
+
+    - name: workaround for docker
+      become: true
+      ansible.builtin.command:
+        cmd: chmod 666 /var/run/docker.sock
+      
+    - name: restart docker
+      become: true
+      ansible.builtin.command:
+        cmd: systemctl restart docker
+
+    - name: start malcolm
+      become_user: vagrant
+      retries: 5
+      ansible.builtin.command:
+        chdir: /Malcolm/scripts
+        cmd: ./start
+        
+    ###
+    ### Uncomment these tasks if you want a desktop and browser to view malcolm interface in the VM
+    ###
+    # - name: Nice Desktop GUI
+    #   ansible.builtin.apt:
+    #     pkg:
+    #       - xfce4
+    #       - firefox
+    #     state: latest
+    #     update_cache: true
+    # - name: reboot for desktop
+    #   ansible.builtin.reboot:
+        
