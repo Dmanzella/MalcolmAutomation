@@ -67,10 +67,16 @@ Vagrant.configure("2") do |config|
   #   apt-get install -y apache2
   # SHELL
 
+
+  ## if you want a different OS, here is where you supply it...must be in Vagrant Cloud Repo
   config.vm.box = "bento/ubuntu-20.04"
   config.vm.disk :disk, size: "150GB", primary: true
   config.vm.hostname = "Malcolm"
 
+
+  # # port forwarding rules so our host machine can access vm web interface, vagrant automatically sets up ssh for us, so just adding http/htpps. This is untested
+  config.vm.network "forwarded_port", guest: 80, host: 6000
+  config.vm.network "forwarded_port", guest: 443, host: 6001
 
   ##this makes the VM beefy to host Malcolm, make sure your host has the memory
   ##
@@ -78,7 +84,7 @@ Vagrant.configure("2") do |config|
   ##
   config.vm.provider "virtualbox" do |vb|    
     vb.name = "Malcolm"
-    vb.customize ["modifyvm", :id, "--cpuexecutioncap", "80"]  
+    # vb.customize ["modifyvm", :id, "--cpuexecutioncap", "80"]  
     vb.memory = 32000
     vb.cpus = 4
     vb.customize ["modifyvm", :id, "--ioapic", "on"]
@@ -91,7 +97,7 @@ Vagrant.configure("2") do |config|
 
   #set everything else up with ansible
   config.vm.provision "ansible" do |ansible|
-    
+
     # Use for debugging ansible, add more v's for more verbosity
     # ansible.verbose = "v"   
     ansible.playbook = "playbook.yml"

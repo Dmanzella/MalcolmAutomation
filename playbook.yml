@@ -191,19 +191,21 @@
     ### Uncomment these tasks if you want a desktop and browser to view malcolm interface in the VM ###
     ###################################################################################################
 
+    ## Shouldnt need this is you can just connect to VM malcolm web interaface from you host machine
+
     # Note: Default user for vm's made in vagrant is vagrant:vagrant
     # Note: This will add a few minutes of time to the playbook
-    - name: Nice Desktop GUI
-      changed_when: false
-      ansible.builtin.apt:
-        pkg:
-          - xfce4
-          - firefox
-        state: latest
-        update_cache: true
+    # - name: Nice Desktop GUI
+    #   changed_when: false
+    #   ansible.builtin.apt:
+    #     pkg:
+    #       - xfce4
+    #       - firefox
+    #     state: latest
+    #     update_cache: true
 
-    - name: reboot for desktop
-      ansible.builtin.reboot:
+    # - name: reboot for desktop
+    #   ansible.builtin.reboot:
 
     ####################################################################################
     ### Start of testing phase of playbook, time to upload and test pcaps in malcolm ###
@@ -244,9 +246,9 @@
         cmd: ./logstash_wait.sh
 
 
-    ##
-    ##  This is the tagging task, modify as needed for tests. Currently am indexing every pcap so each has a unique number to reference it
-    ##
+    #
+    #  This is the tagging task, modify as needed for tests. Currently am indexing every pcap so each has a unique number to reference it
+    #
     - name: create script that indexes all test pcap files in a directory 
       changed_when: false
       ansible.builtin.copy:
@@ -258,7 +260,7 @@
 
           for file in /pcaps/pcaps/*.pcap; do
               filename=$(basename "$file" .pcap)
-              new_filename="${index},${filename}.pcap"
+              new_filename="tag${index},${filename}.pcap"
 
               mv "$file" /Malcolm/pcap/upload/"$new_filename"
               ((index++))
@@ -277,14 +279,37 @@
         chdir: /Malcolm/scripts
         cmd: ./pcap_indexer.sh
 
-    # - name: upload pcaps
-    #   changed_when: false
-    #   ansible.builtin.command:
-    #     chdir: /pcaps/pcaps
-    #     cmd: cp -r    /Malcolm/pcap/upload/test1,pcap1,BACnet.pcap
-
     ## start testing with api calls....need to figure out the framework for this
     ## Also should come up with a naming scheme for the pcaps 
-  
-
     
+    - name: make api testing dir (okay if this fails)
+      ignore_errors: true
+      ansible.builtin.command:
+        cmd: mkdir /ApiTesting
+
+    - name: api call to ping 
+      ansible.builtin.shell:
+        chdir: /ApiTesting
+        cmd: "curl -k --location 'https://localhost/mapi/ping' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > ping.json"
+
+    - name: api call to fields
+      ansible.builtin.shell:
+        chdir: /ApiTesting
+        cmd: "curl -k --location 'https://localhost/mapi/fields' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > fields.json"
+
+    - name: api call to indices
+      ansible.builtin.shell:
+        chdir: /ApiTesting
+        cmd: "curl -k --location 'https://localhost/mapi/indices' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > indices.json" 
+    
+    - name: api call to version
+      ansible.builtin.shell:
+        chdir: /ApiTesting 
+        cmd: "curl -k --location 'https://localhost/mapi/version' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > version.json"
+
+
+    - name: chown api data to vagrant so we can scp them from our 
+      become: true
+      ansible.builtin.command:
+        chdir: /ApiTesting
+        cmd: "chown -R vagrant:vagrant ."
