@@ -1,16 +1,18 @@
----
+
 - hosts: all
   become: yes
 
   tasks:
 
     - name: Install Aptitute
+      changed_when: false
       apt:
         name: aptitude
         state: latest
         update_cache: true
 
     - name: "Install Packages (May take a bit :)"
+      changed_when: false
       ansible.builtin.apt:
         pkg:
           - apt-transport-https
@@ -25,16 +27,19 @@
         update_cache: true
 
     - name: Add Docker's official GPG key
+      changed_when: false
       apt_key:
         url: https://download.docker.com/linux/ubuntu/gpg
         state: present
 
     - name: Add Docker repository
+      changed_when: false
       apt_repository:
         repo: deb https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} stable
         state: present
 
     - name: Install Docker and related packages
+      changed_when: false
       ansible.builtin.apt:
         name: "{{ item }}"
         state: present
@@ -47,6 +52,7 @@
         - docker-compose-plugin
 
     - name: install python packages
+      changed_when: false
       ansible.builtin.pip:
         name:
           - python-dotenv
@@ -59,6 +65,7 @@
     # This task sometimes take forever.....look into this later
     - name: Git Clone Malcolm
       retries: 2
+      changed_when: false
       ansible.builtin.git:
         repo: https://github.com/cisagov/Malcolm.git
         clone: true
@@ -67,24 +74,28 @@
 
     - name: change owner of Malcolm to vagrant user 
       become: true
+      changed_when: false
       shell:
         chdir: /Malcolm
         cmd: "chown -R vagrant:vagrant ."
 
     - name: Remove lines 2982-2911 from install.py so it doesn't stall
       become: true 
+      changed_when: false
       shell:
         cmd: "sed -i '2892,2911d' /Malcolm/scripts/install.py"
 
     # This now works after removing the ~20 lines from the previous task, gets python packages
     - name: Run install.py as vagrant
       become_user: vagrant
+      changed_when: false
       ansible.builtin.shell:
         chdir: /Malcolm/scripts
         cmd: ./install.py --defaults --restart-malcolm
 
     - name: add vagrant as docker user
       become: true
+      changed_when: false
       shell:
         cmd: "usermod -a -G docker vagrant"
 
@@ -94,6 +105,7 @@
     ##
     - name: Run configure script
       become_user: vagrant
+      changed_when: false
       ansible.builtin.shell:
         chdir: /Malcolm/scripts/
         cmd: "python3 /Malcolm/scripts/configure --defaults --restart-malcolm --auto-arkime --auto-suricata --auto-zeek --zeek-ics --zeek-ics-best-guess --auto-oui --auto-freq --file-extraction notcommtxt --file-preservation quarantined --extracted-file-server --extracted-file-server-password infected --extracted-file-server-zip --extracted-file-capa --extracted-file-clamav --extracted-file-yara --netbox --netbox-enrich --netbox-autopopulate false --netbox-site-name malcolm"
@@ -105,6 +117,7 @@
 
     - name: Creating script because ansible is being stupid with auth_setup
       become: true
+      changed_when: false
       ansible.builtin.copy:
         dest: "/Malcolm/scripts/auth_setup_workaround.sh"
         content: |
@@ -114,65 +127,164 @@
 
     - name: make workaround executable
       become: true
+      changed_when: false
       ansible.builtin.shell:
         chdir: /Malcolm/scripts/
         cmd: chmod +x /Malcolm/scripts/auth_setup_workaround.sh
 
     - name: Remove lines 2285-2286 from control.py so it doesn't break ansible running auth_setup
       become: true 
+      changed_when: false
       shell:
         cmd: "sed -i '2285,2286d' /Malcolm/scripts/control.py"
 
     - name: run auth script workaround as vagrant user
       retries: 10
       become_user: vagrant 
+      changed_when: false
       ansible.builtin.shell:
         chdir: /Malcolm/scripts
         cmd: ./auth_setup_workaround.sh
 
     - name: Pull Malcolm docker containers (This will take a few minutes...longer on a slow network)
       become: true
+      changed_when: false
       shell:
         chdir: /Malcolm
         cmd: "docker compose --profile malcolm pull"
 
     - name: add vagrant as docker user
       become: true
+      changed_when: false
       ansible.builtin.shell:
         cmd: usermod -a -G docker vagrant
 
     - name: add root as docker user
       become: true
+      changed_when: false
       ansible.builtin.command:
         cmd: usermod -a -G docker root
 
     - name: workaround for docker
       become: true
+      changed_when: false
       ansible.builtin.command:
         cmd: chmod 666 /var/run/docker.sock
       
     - name: restart docker
       become: true
+      changed_when: false
       ansible.builtin.command:
         cmd: systemctl restart docker
 
     - name: start malcolm
       become_user: vagrant
       retries: 5
+      changed_when: false
       ansible.builtin.command:
+      args:
         chdir: /Malcolm/scripts
         cmd: ./start
+      
         
-    ###
-    ### Uncomment these tasks if you want a desktop and browser to view malcolm interface in the VM
-    ###
-    # - name: Nice Desktop GUI
-    #   ansible.builtin.apt:
-    #     pkg:
-    #       - xfce4
-    #       - firefox
-    #     state: latest
-    #     update_cache: true
-    # - name: reboot for desktop
-    #   ansible.builtin.reboot:
-        
+    ###################################################################################################
+    ### Uncomment these tasks if you want a desktop and browser to view malcolm interface in the VM ###
+    ###################################################################################################
+
+    # Note: Default user for vm's made in vagrant is vagrant:vagrant
+    # Note: This will add a few minutes of time to the playbook
+    - name: Nice Desktop GUI
+      changed_when: false
+      ansible.builtin.apt:
+        pkg:
+          - xfce4
+          - firefox
+        state: latest
+        update_cache: true
+
+    - name: reboot for desktop
+      ansible.builtin.reboot:
+
+    ####################################################################################
+    ### Start of testing phase of playbook, time to upload and test pcaps in malcolm ###
+    ####################################################################################
+
+    - name: Pull PCAP test file repo
+      retries: 2
+      changed_when: false
+      ansible.builtin.git:
+        repo: https://github.com/mmguero-dev/Malcolm-PCAP
+        clone: true
+        dest: /pcaps
+        force: true
+
+    - name: Creating script to wait for logstash
+      changed_when: false
+      ansible.builtin.copy:
+        dest: "/Malcolm/scripts/logstash_wait.sh"
+        content: |
+          #!/bin/bash
+
+          until docker compose --profile malcolm -f /Malcolm/docker-compose.yml logs logstash 2>/dev/null | grep -q "Pipelines running"; do
+            [[ -n -v ]] && echo "waiting for Malcolm to become ready for PCAP data..." >&2
+            sleep 10
+          done
+
+    - name: make logstash_wait.sh executable
+      become: true
+      changed_when: false
+      ansible.builtin.shell:
+        chdir: /Malcolm/scripts/
+        cmd: chmod +x /Malcolm/scripts/logstash_wait.sh
+
+    - name: run logstash_wait.sh until logstash is ready to ingest
+      changed_when: false
+      ansible.builtin.shell:
+        chdir: /Malcolm/scripts
+        cmd: ./logstash_wait.sh
+
+
+    ##
+    ##  This is the tagging task, modify as needed for tests. Currently am indexing every pcap so each has a unique number to reference it
+    ##
+    - name: create script that indexes all test pcap files in a directory 
+      changed_when: false
+      ansible.builtin.copy:
+        dest:  /Malcolm/scripts/pcap_indexer.sh
+        content: |
+          #!/bin/bash
+
+          index = 1
+
+          for file in /pcaps/pcaps/*.pcap; do
+              filename=$(basename "$file" .pcap)
+              new_filename="${index},${filename}.pcap"
+
+              mv "$file" /Malcolm/pcap/upload/"$new_filename"
+              ((index++))
+          done
+
+    - name: make pcap_indexer.sh executable
+      become: true
+      changed_when: false
+      ansible.builtin.shell:
+        cmd: chmod +x /Malcolm/scripts/pcap_indexer.sh
+
+    - name: run pcap_indexer.sh
+      changed_when: false
+      become: true
+      ansible.builtin.shell:
+        chdir: /Malcolm/scripts
+        cmd: ./pcap_indexer.sh
+
+    # - name: upload pcaps
+    #   changed_when: false
+    #   ansible.builtin.command:
+    #     chdir: /pcaps/pcaps
+    #     cmd: cp -r    /Malcolm/pcap/upload/test1,pcap1,BACnet.pcap
+
+    ## start testing with api calls....need to figure out the framework for this
+    ## Also should come up with a naming scheme for the pcaps 
+  
+
+    

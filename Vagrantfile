@@ -71,7 +71,11 @@ Vagrant.configure("2") do |config|
   config.vm.disk :disk, size: "150GB", primary: true
   config.vm.hostname = "Malcolm"
 
+
   ##this makes the VM beefy to host Malcolm, make sure your host has the memory
+  ##
+  ## MAKE SURE YOU HAVE ENOUGH RAM FOR 32GB VM... IF NOT THEN REDUCE BEFORE RUNNING. SAME WITH CPU CORES
+  ##
   config.vm.provider "virtualbox" do |vb|    
     vb.name = "Malcolm"
     vb.customize ["modifyvm", :id, "--cpuexecutioncap", "80"]  
@@ -87,6 +91,7 @@ Vagrant.configure("2") do |config|
 
   #set everything else up with ansible
   config.vm.provision "ansible" do |ansible|
+    
     # Use for debugging ansible, add more v's for more verbosity
     # ansible.verbose = "v"   
     ansible.playbook = "playbook.yml"

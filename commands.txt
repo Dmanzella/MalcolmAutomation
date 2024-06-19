@@ -1,3 +1,4 @@
+# shouldnt need to use this one as running vagrant up automatically pulls the image if its not installed already
 vagrant init generic/ubuntu2204
 
 
