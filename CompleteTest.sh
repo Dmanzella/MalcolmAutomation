@@ -9,7 +9,7 @@ vagrant up
 
 # copy api json files to your host for analysis/verification
 # default user is vagrant:vagrant
-sshpass -p "vagrant" scp -P 2222 -r vagrant@localhost:/ApiTesting .
+sshpass -p "vagrant" scp -P 2222 -r vagrant@localhost:/ApiTesting . && echo "malcolm api json data copied to ApiTesting/"
 
 # commented out for now to make testing faster
 # vagrant destroy
