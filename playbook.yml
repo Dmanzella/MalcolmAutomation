@@ -4,7 +4,7 @@
 
   tasks:
 
-    - name: Install Aptitute
+    - name: Install Aptitude
       changed_when: false
       apt:
         name: aptitude
@@ -21,6 +21,7 @@
           - gnupg
           - software-properties-common
           - python3
+          - jq
           - pip 
           - dialog
         state: latest
@@ -71,6 +72,8 @@
         clone: true
         dest: /Malcolm
         force: true
+        # Use version to specify if a certain branch of Malcolm is what you want
+        # version: dev-branch
 
     - name: change owner of Malcolm to vagrant user 
       become: true
@@ -99,10 +102,7 @@
       shell:
         cmd: "usermod -a -G docker vagrant"
 
-    ##
-    #### This tries to the same thing as the previous task, trying to make all the option work, still no luck.
     #### Works now after removing only the "--netbox-preload-prefixes"
-    ##
     - name: Run configure script
       become_user: vagrant
       changed_when: false
@@ -110,11 +110,9 @@
         chdir: /Malcolm/scripts/
         cmd: "python3 /Malcolm/scripts/configure --defaults --restart-malcolm --auto-arkime --auto-suricata --auto-zeek --zeek-ics --zeek-ics-best-guess --auto-oui --auto-freq --file-extraction notcommtxt --file-preservation quarantined --extracted-file-server --extracted-file-server-password infected --extracted-file-server-zip --extracted-file-capa --extracted-file-clamav --extracted-file-yara --netbox --netbox-enrich --netbox-autopopulate false --netbox-site-name malcolm"
 
-
     ##
     #####   Created this workaround auth script on the VM because ansible for some reason can't run auth_setup without completely breaking it
     ##
-
     - name: Creating script because ansible is being stupid with auth_setup
       become: true
       changed_when: false
@@ -138,6 +136,7 @@
       shell:
         cmd: "sed -i '2285,2286d' /Malcolm/scripts/control.py"
 
+    # Creates default Malcolm Basic Auth login analyst:M@lc0lm
     - name: run auth script workaround as vagrant user
       retries: 10
       become_user: vagrant 
@@ -191,7 +190,7 @@
     ### Uncomment these tasks if you want a desktop and browser to view malcolm interface in the VM ###
     ###################################################################################################
 
-    ## Shouldnt need this is you can just connect to VM malcolm web interaface from you host machine
+    ## Shouldnt need this as you can just connect to VM malcolm web interaface from you host machine on port 6001
 
     # Note: Default user for vm's made in vagrant is vagrant:vagrant
     # Note: This will add a few minutes of time to the playbook
@@ -245,10 +244,8 @@
         chdir: /Malcolm/scripts
         cmd: ./logstash_wait.sh
 
-
-    #
-    #  This is the tagging task, modify as needed for tests. Currently am indexing every pcap so each has a unique number to reference it
-    #
+    #  This is the tagging task, modify as needed for tests. Currently I am indexing every pcap so each has a unique number to reference it
+    #  The very first tag is not given a number... need to fix this, the second pcap starts at 1 and the each one counts up
     - name: create script that indexes all test pcap files in a directory 
       changed_when: false
       ansible.builtin.copy:
@@ -256,14 +253,14 @@
         content: |
           #!/bin/bash
 
-          index = 1
+          INDEX = 1
 
           for file in /pcaps/pcaps/*.pcap; do
               filename=$(basename "$file" .pcap)
-              new_filename="tag${index},${filename}.pcap"
+              new_filename="tag$INDEX,${filename}.pcap"
 
               mv "$file" /Malcolm/pcap/upload/"$new_filename"
-              ((index++))
+              ((INDEX++))
           done
 
     - name: make pcap_indexer.sh executable
@@ -279,36 +276,141 @@
         chdir: /Malcolm/scripts
         cmd: ./pcap_indexer.sh
 
+    # this script waits for log count to remain idle (checking if all pcaps have been ingested)
+    - name: create seth's Malcolm processing checker
+      changed_when: false
+      ansible.builtin.copy:
+        dest:  /Malcolm/scripts/processing_check.sh
+        content: |
+          #!/bin/bash
+
+          NUMERIC_REGEX='^[0-9]+$'
+          PCAP_PROCESS_PRE_WAIT=30
+          PCAP_PROCESS_IDLE_SECONDS=60
+          PCAP_PROCESS_IDLE_MAX_SECONDS=3600
+
+          if (( $PCAP_PROCESS_IDLE_SECONDS > 0 )); then
+            # wait for processing to finish out (count becomes "idle", no longer increasing)
+            sleep $PCAP_PROCESS_PRE_WAIT
+            LAST_LOG_COUNT=0
+            LAST_LOG_COUNT_CHANGED_TIME=$(date -u +%s)
+            FIRST_LOG_COUNT_TIME=$LAST_LOG_COUNT_CHANGED_TIME
+            while true; do
+
+              # if it's been more than the maximum wait time, bail
+              CURRENT_TIME=$(date -u +%s)
+              if (( ($CURRENT_TIME - $FIRST_LOG_COUNT_TIME) >= $PCAP_PROCESS_IDLE_MAX_SECONDS )); then
+                [[ -n -v ]] && echo "Max wait time expired waiting for idle state" >&2
+                break
+              fi
+
+              # get the total number of session records in the database
+              NEW_LOG_COUNT=$(( docker compose --profile malcolm -f /Malcolm/docker-compose.yml exec -u $(id -u) -T api \
+                                curl -k -sSL "http://localhost:5000/mapi/agg/event.provider?from=1970" | \
+                                jq -r '.. | .buckets? // empty | .[] | objects | [.doc_count|tostring] | join ("")' | \
+                                awk '{s+=$1} END {print s}') 2>/dev/null )
+              if [[ $NEW_LOG_COUNT =~ $NUMERIC_REGEX ]] ; then
+                [[ -n -v ]] && echo "Waiting for idle state ($NEW_LOG_COUNT logs) ..." >&2
+                NEW_LOG_COUNT_TIME=$CURRENT_TIME
+
+                if (( $LAST_LOG_COUNT == $NEW_LOG_COUNT )); then
+                  # the count hasn't changed, so compare against how long we've been idle
+                  if (( ($NEW_LOG_COUNT_TIME - $LAST_LOG_COUNT_CHANGED_TIME) >= $PCAP_PROCESS_IDLE_SECONDS )); then
+                    [[ -n -v ]] && echo "Idle state reached ($NEW_LOG_COUNT logs for at lease $PCAP_PROCESS_IDLE_SECONDS seconds)" >&2
+                    break
+                  fi
+
+                else
+                  # the count has changed, no longer idle, reset the non-idle time counter
+                  LAST_LOG_COUNT=$NEW_LOG_COUNT
+                  LAST_LOG_COUNT_CHANGED_TIME=$NEW_LOG_COUNT_TIME
+                fi
+
+              else
+                echo "Failed to get log count, will retry!" >&2
+                sleep 30
+              fi
+              sleep 10
+            done
+          fi
+      
+    - name: make processing_check.sh executable
+      become: true 
+      changed_when: false
+      ansible.builtin.command:
+        cmd: "chmod +x /Malcolm/scripts/processing_check.sh"
+
+    - name: run processing_check.sh (This will take like 15 minutes as the pcap repo is currenlty massive)
+      changed_when: false 
+      ansible.builtin.command:
+        chdir: /Malcolm/scripts
+        cmd: ./processing_check.sh
+
     ## start testing with api calls....need to figure out the framework for this
-    ## Also should come up with a naming scheme for the pcaps 
+    # ## Also should come up with a naming scheme for the pcaps 
     
     - name: make api testing dir (okay if this fails)
       ignore_errors: true
+      changed_when: false
       ansible.builtin.command:
         cmd: mkdir /ApiTesting
 
     - name: api call to ping 
+      changed_when: false
       ansible.builtin.shell:
         chdir: /ApiTesting
         cmd: "curl -k --location 'https://localhost/mapi/ping' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > ping.json"
 
     - name: api call to fields
+      changed_when: false
       ansible.builtin.shell:
         chdir: /ApiTesting
         cmd: "curl -k --location 'https://localhost/mapi/fields' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > fields.json"
 
     - name: api call to indices
+      changed_when: false
       ansible.builtin.shell:
         chdir: /ApiTesting
         cmd: "curl -k --location 'https://localhost/mapi/indices' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > indices.json" 
     
     - name: api call to version
+      changed_when: false
       ansible.builtin.shell:
         chdir: /ApiTesting 
         cmd: "curl -k --location 'https://localhost/mapi/version' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > version.json"
 
+    - name: api call to agg for user agents
+      changed_when: false
+      ansible.builtin.shell:
+        chdir: /ApiTesting
+        cmd: "curl -k --location 'https://localhost/mapi/agg/user_agent.original?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > user_agent.json"
 
-    - name: chown api data to vagrant so we can scp them from our 
+    - name: api call to agg for protocols
+      changed_when: false
+      ansible.builtin.shell:
+        chdir: /ApiTesting
+        cmd: "curl -k --location 'https://localhost/mapi/agg/network.transport,network.protocol,network.protocol_version?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > protocols.json"
+
+    - name: api call to agg for software-properties-common
+      changed_when: false
+      ansible.builtin.shell:
+        chdir: /ApiTesting
+        cmd: "curl -k --location 'https://localhost/mapi/agg/zeek.software.name,zeek.software.unparsed_version?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > software.json"
+
+    - name: api call to agg for notice categories
+      changed_when: false
+      ansible.builtin.shell:
+        chdir: /ApiTesting
+        cmd: "curl -k --location 'https://localhost/mapi/agg/zeek.notice.category,zeek.notice.sub_category?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > notice_catrgories.json"
+
+    - name: api call to agg for severity tags
+      changed_when: false
+      ansible.builtin.shell:
+        chdir: /ApiTesting
+        cmd: "curl -k --location 'https://localhost/mapi/agg/event.severity_tags?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > severity_tags.json"
+
+    - name: chown api data to vagrant so we can scp them from host
+      changed_when: false
       become: true
       ansible.builtin.command:
         chdir: /ApiTesting

@@ -1,10 +1,15 @@
 #!/bin/bash
 
-# ./environment_setup.sh
+./environment_setup.sh
+
+# I have seen one too many cows
+export ANSIBLE_NOCOWS=1
 
 vagrant up
 
 # copy api json files to your host for analysis/verification
-scp -P 2222 -r vagrant@localhost:/ApiTesting .
+# default user is vagrant:vagrant
+sshpass -p "vagrant" scp -P 2222 -r vagrant@localhost:/ApiTesting .
 
-vagrant destroy
+# commented out for now to make testing faster
+# vagrant destroy
