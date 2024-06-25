@@ -73,28 +73,64 @@ Vagrant.configure("2") do |config|
   config.vm.disk :disk, size: "150GB", primary: true
   config.vm.hostname = "Malcolm"
 
-  # # port forwarding rules so our host machine can access vm web interface, vagrant automatically sets up ssh for us, so just adding http/htpps. This is untested
+  # # port forwarding rules so our host machine can access vm web interface, vagrant automatically sets up ssh for us, so just adding http/htpps
   config.vm.network "forwarded_port", guest: 80, host: 6000
   config.vm.network "forwarded_port", guest: 443, host: 6001
 
-  ##this makes the VM beefy to host Malcolm, make sure your host has the memory
-  ##
-  ## MAKE SURE YOU HAVE ENOUGH RAM FOR 32GB VM... IF NOT THEN REDUCE BEFORE RUNNING. SAME WITH CPU CORES
-  ##
-  config.vm.provider "virtualbox" do |vb|    
-    vb.name = "Malcolm"
+
+
+
+  config.vm.provider "virtualbox" do |v|    
+    v.name = "Malcolm"
     # vb.customize ["modifyvm", :id, "--cpuexecutioncap", "80"]  
-    vb.memory = 32000
-    vb.cpus = 4
-    vb.customize ["modifyvm", :id, "--ioapic", "on"]
+    v.memory = 32000
+    v.cpus = 4
+    v.customize ["modifyvm", :id, "--ioapic", "on"]
 
     #networking for NAT
-    vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
-    vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
+    v.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+    v.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
 
-    vb.customize ["modifyvm", :id, "--cableconnected1", "on"]
-
+    v.customize ["modifyvm", :id, "--cableconnected1", "on"]
   end
+
+  ## From the vagrant docs for determining a VM provider.
+  # 1. The --provider flag on a vagrant up is chosen above all else, if it is present.
+  # 2. If the VAGRANT_DEFAULT_PROVIDER environmental variable is set, it takes next priority and will be the provider chosen.
+  # 3. Vagrant will go through all of the config.vm.provider calls in the Vagrantfile and try each in order. It will choose the first provider that is usable. For example, if you configure Hyper-V, it will never be chosen on Mac this way. It must be both configured and usable.
+
+  config.vm.provider "vmware_desktop" do |desktop|    
+    desktop.vmx["memsize"] = "32000"
+    desktop.vmx["numvcpus"] = "4" 
+  end
+
+  # windows things
+  config.vm.provider "hyperv" do |hyperv|
+    hyperv.memory = 32000
+    hyperv.cpus = 4
+  end
+
+  config.vm.provider :libvirt do |libvirt, override|
+    override.vm.box = "generic/ubuntu2004"
+    libvirt.memory = 32000
+    libvirt.cpus = 4
+  end
+
+  # config for libvirt so it has internet
+  # config.vm.network :private_network,
+  #   :libvirt__network_name => "default",
+  #   # :libvirt__forward_mode => "nat",
+  #   :ip => "192.168.121.225"
+
+
+  # macbook things
+  config.vm.provider :parallels do |prl|
+    prl.memory = 32000
+    prl.cpus = 4
+  end
+
+
+
 
   #set everything else up with ansible
   config.vm.provision "ansible" do |ansible|
