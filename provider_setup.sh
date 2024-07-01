@@ -4,11 +4,11 @@ $PWD=$(pwd)
 $USER=$(whoami)
 
 # Prompt user to select a VM provider
-echo "Which VM provider do you want to use with Vagrant?"
+echo "Which VM provider do you want to use with Vagrant and install?"
 echo "1. VirtualBox"
 echo "2. VMware"
 echo "3. libvirt"
-echo "4. parallels"
+echo "4. parallels (Mac only)"
 read -p "Enter your choice (1-4): " choice
 
 case $choice in
@@ -62,6 +62,7 @@ case $choice in
             echo "libvirt is not installed, installing..."
             sudo apt-get install -y qemu libvirt-daemon-system ebtables libguestfs-tools ruby-fog-libvirt libvirt-dev libvirt-daemon libvirt-clients virt-manager python3-libvirt
             sudo usermod -a -G libvirt $USER
+            sudo sed -i '81 s/^#//' /etc/libvirt/libvirtd.conf
         fi
 
         if vagrant plugin list | grep -q vagrant-libvirt

@@ -2,10 +2,17 @@
 - hosts: all
   become: yes
 
+  # Repo Selector will automate changing repo and version
+  vars:
+    MALCOLM_REPO: 'https://github.com/cisagov/Malcolm.git'
+    MALCOLM_VERSION: 'v24.05.0'
+
   tasks:
 
     - name: Install Aptitude
+      retries: 2
       changed_when: false
+      ignore_errors: true
       apt:
         name: aptitude
         state: latest
@@ -28,6 +35,7 @@
         update_cache: true
 
     - name: Add Docker's official GPG key
+      retries: 3
       changed_when: false
       apt_key:
         url: https://download.docker.com/linux/ubuntu/gpg
@@ -65,15 +73,23 @@
 
     # This task sometimes take forever.....look into this later
     - name: Git Clone Malcolm
-      retries: 2
+      retries: 3
       changed_when: false
       ansible.builtin.git:
-        repo: https://github.com/cisagov/Malcolm.git
+        repo: "{{ MALCOLM_REPO }}"
         clone: true
         dest: /Malcolm
         force: true
         # Use version to specify if a certain branch of Malcolm is what you want
-        # version: dev-branch
+        # should add functionality to comment this out if no repo_selector version is specified
+        version: "{{ MALCOLM_VERSION }}"
+
+      # uses the Malcolm script to automate building older docker malcolm images
+    - name: retag docker images so we can use older Malcolm versions if specified
+      changed_when: false
+      ansible.builtin.shell:
+        chdir: /Malcolm/scripts
+        cmd: "./github_image_helper.sh 4"
 
     - name: change owner of Malcolm to vagrant user 
       become: true
@@ -82,11 +98,11 @@
         chdir: /Malcolm
         cmd: "chown -R vagrant:vagrant ."
 
-    - name: Remove lines 2982-2911 from install.py so it doesn't stall
-      become: true 
-      changed_when: false
-      shell:
-        cmd: "sed -i '2892,2911d' /Malcolm/scripts/install.py"
+    # - name: Remove lines 2982-2911 from install.py so it doesn't stall
+    #   become: true 
+    #   changed_when: false
+    #   shell:
+    #     cmd: "sed -i '2892,2911d' /Malcolm/scripts/install.py"
 
     # This now works after removing the ~20 lines from the previous task, gets python packages
     - name: Run install.py as vagrant
@@ -96,61 +112,17 @@
         chdir: /Malcolm/scripts
         cmd: ./install.py --defaults --restart-malcolm
 
-    - name: add vagrant as docker user
-      become: true
-      changed_when: false
-      shell:
-        cmd: "usermod -a -G docker vagrant"
-
     #### Works now after removing only the "--netbox-preload-prefixes"
     - name: Run configure script
       become_user: vagrant
       changed_when: false
       ansible.builtin.shell:
         chdir: /Malcolm/scripts/
+        ## This one works with the latest version of malcolm, doesnt work for 23.12.1
         cmd: "python3 /Malcolm/scripts/configure --defaults --restart-malcolm --auto-arkime --auto-suricata --auto-zeek --zeek-ics --zeek-ics-best-guess --auto-oui --auto-freq --file-extraction notcommtxt --file-preservation quarantined --extracted-file-server --extracted-file-server-password infected --extracted-file-server-zip --extracted-file-capa --extracted-file-clamav --extracted-file-yara --netbox --netbox-enrich --netbox-autopopulate false --netbox-site-name malcolm"
-
-    ##
-    #####   Created this workaround auth script on the VM because ansible for some reason can't run auth_setup without completely breaking it
-    ##
-    - name: Creating script because ansible is being stupid with auth_setup
-      become: true
-      changed_when: false
-      ansible.builtin.copy:
-        dest: "/Malcolm/scripts/auth_setup_workaround.sh"
-        content: |
-          #!/bin/bash
-
-          ./auth_setup --auth-noninteractive --auth-admin-username analyst --auth-admin-password-openssl '$1$owXoS5pf$YesZKhhWS0d3zVUUhdcef0' --auth-admin-password-htpasswd '$2y$05$a8jiJsLZ1mFnt5srJD3HAOKC8IUaZcOlsqp8txBlmMjW6wUXUtN3S' --auth-generate-webcerts --auth-generate-fwcerts --auth-generate-netbox-passwords
-
-    - name: make workaround executable
-      become: true
-      changed_when: false
-      ansible.builtin.shell:
-        chdir: /Malcolm/scripts/
-        cmd: chmod +x /Malcolm/scripts/auth_setup_workaround.sh
-
-    - name: Remove lines 2285-2286 from control.py so it doesn't break ansible running auth_setup
-      become: true 
-      changed_when: false
-      shell:
-        cmd: "sed -i '2285,2286d' /Malcolm/scripts/control.py"
-
-    # Creates default Malcolm Basic Auth login analyst:M@lc0lm
-    - name: run auth script workaround as vagrant user
-      retries: 10
-      become_user: vagrant 
-      changed_when: false
-      ansible.builtin.shell:
-        chdir: /Malcolm/scripts
-        cmd: ./auth_setup_workaround.sh
-
-    - name: Pull Malcolm docker containers (This will take a few minutes...longer on a slow network)
-      become: true
-      changed_when: false
-      shell:
-        chdir: /Malcolm
-        cmd: "docker compose --profile malcolm pull"
+        
+        # works for 23.12.1
+        # cmd: "python3 /Malcolm/scripts/configure --defaults --auto-arkime --auto-suricata --auto-zeek --zeek-ics --zeek-ics-best-guess --auto-oui --auto-freq"
 
     - name: add vagrant as docker user
       become: true
@@ -176,6 +148,20 @@
       ansible.builtin.command:
         cmd: systemctl restart docker
 
+    - name: auth auth_setup
+      become_user: vagrant
+      changed_when: false
+      ansible.builtin.shell:
+        chdir: /Malcolm/scripts/
+        cmd: "./auth_setup --auth-noninteractive --auth-admin-username analyst --auth-admin-password-openssl '$1$owXoS5pf$YesZKhhWS0d3zVUUhdcef0' --auth-admin-password-htpasswd '$2y$05$a8jiJsLZ1mFnt5srJD3HAOKC8IUaZcOlsqp8txBlmMjW6wUXUtN3S' --auth-generate-webcerts --auth-generate-fwcerts --auth-generate-netbox-passwords"
+
+    - name: Pull Malcolm docker containers (This will take a few minutes...longer on a slow network)
+      become: true
+      changed_when: false
+      shell:
+        chdir: /Malcolm
+        cmd: "docker compose --profile malcolm pull"
+
     - name: start malcolm
       become_user: vagrant
       retries: 5
@@ -184,31 +170,10 @@
       args:
         chdir: /Malcolm/scripts
         cmd: ./start
-      
-        
-    ###################################################################################################
-    ### Uncomment these tasks if you want a desktop and browser to view malcolm interface in the VM ###
-    ###################################################################################################
 
-    ## Shouldnt need this as you can just connect to VM malcolm web interaface from you host machine on port 6001
-
-    # Note: Default user for vm's made in vagrant is vagrant:vagrant
-    # Note: This will add a few minutes of time to the playbook
-    # - name: Nice Desktop GUI
-    #   changed_when: false
-    #   ansible.builtin.apt:
-    #     pkg:
-    #       - xfce4
-    #       - firefox
-    #     state: latest
-    #     update_cache: true
-
-    # - name: reboot for desktop
-    #   ansible.builtin.reboot:
-
-    ####################################################################################
-    ### Start of testing phase of playbook, time to upload and test pcaps in malcolm ###
-    ####################################################################################
+    ###########################################################################################################################################
+    ### Start of testing phase of playbook, time to upload and test pcaps in malcolm. Need to figure out how I want to make this extensible ###
+    ###########################################################################################################################################
 
     - name: Pull PCAP test file repo
       retries: 2

@@ -67,7 +67,6 @@ Vagrant.configure("2") do |config|
   #   apt-get install -y apache2
   # SHELL
 
-
   ## if you want a different OS, here is where you supply it...must be in Vagrant Cloud Repo
   config.vm.box = "bento/ubuntu-20.04"
   config.vm.disk :disk, size: "150GB", primary: true
@@ -78,9 +77,8 @@ Vagrant.configure("2") do |config|
   config.vm.network "forwarded_port", guest: 443, host: 6001
 
 
-
-
-  config.vm.provider "virtualbox" do |v|    
+  config.vm.provider "virtualbox" do |v|
+    virtualbox = 1
     v.name = "Malcolm"
     # vb.customize ["modifyvm", :id, "--cpuexecutioncap", "80"]  
     v.memory = 32000
@@ -93,7 +91,7 @@ Vagrant.configure("2") do |config|
 
     v.customize ["modifyvm", :id, "--cableconnected1", "on"]
   end
-
+  
   ## From the vagrant docs for determining a VM provider.
   # 1. The --provider flag on a vagrant up is chosen above all else, if it is present.
   # 2. If the VAGRANT_DEFAULT_PROVIDER environmental variable is set, it takes next priority and will be the provider chosen.
@@ -116,21 +114,11 @@ Vagrant.configure("2") do |config|
     libvirt.cpus = 4
   end
 
-  # config for libvirt so it has internet
-  # config.vm.network :private_network,
-  #   :libvirt__network_name => "default",
-  #   # :libvirt__forward_mode => "nat",
-  #   :ip => "192.168.121.225"
-
-
   # macbook things
   config.vm.provider :parallels do |prl|
     prl.memory = 32000
     prl.cpus = 4
   end
-
-
-
 
   #set everything else up with ansible
   config.vm.provision "ansible" do |ansible|
