@@ -43,6 +43,6 @@ case $choice in
 esac
 
 # add functionality to leave blank and the version tag in ansible is commented out
-read -p "Enter to Malcolm version tag you want to test (e.g. v24.05.0, v23.12.1) " VERSION
+read -p "Enter to Malcolm version tag you want to test (e.g. v24.05.0, v23.12.1, or press ENTER for the latest version) " VERSION
 
 update_playbook "$REPO_URL" "$VERSION"

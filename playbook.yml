@@ -2,12 +2,23 @@
 - hosts: all
   become: yes
 
-  # Repo Selector will automate changing repo and version
+  # CompleteTest.sh will walk user through setting these variables
   vars:
     MALCOLM_REPO: 'https://github.com/cisagov/Malcolm.git'
-    MALCOLM_VERSION: 'v24.05.0'
+    MALCOLM_VERSION: ''
+    
+    # variables to flip when user picks what test to run, might add support for specific protocol pcaps as well. CompleteTest.sh will modify these
+    LIGHT_TEST: 0
+    MEDIUM_TEST: 0
+    INTENSE_TEST: 1
+    FULL_SCALE_TEST: 0
 
   tasks:
+
+    - name: light is true test
+      ansible.builtin.pause:
+        seconds: 1
+      when: LIGHT_TEST == 1
 
     - name: Install Aptitude
       retries: 2
@@ -18,7 +29,7 @@
         state: latest
         update_cache: true
 
-    - name: "Install Packages (May take a bit :)"
+    - name: "Installing Packages"
       changed_when: false
       ansible.builtin.apt:
         pkg:
@@ -50,15 +61,21 @@
     - name: Install Docker and related packages
       changed_when: false
       ansible.builtin.apt:
-        name: "{{ item }}"
-        state: present
-        update_cache: true
-      loop:
+        # name: "{{ item }}"
+        pkg:
         - docker-ce
         - docker-ce-cli
         - containerd.io
         - docker-buildx-plugin
-        - docker-compose-plugin
+        - docker-compose-plugin         
+        state: present
+        update_cache: true
+      # loop:
+      #   - docker-ce
+      #   - docker-ce-cli
+      #   - containerd.io
+      #   - docker-buildx-plugin
+      #   - docker-compose-plugin
 
     - name: install python packages
       changed_when: false
@@ -71,7 +88,8 @@
           - urllib3
           - docker  
 
-    - name: Git Clone Malcolm
+    # if malcom version is specified, then pull specific malcolm version
+    - name: Git Clone Malcolm (specific version)
       retries: 3
       changed_when: false
       ansible.builtin.git:
@@ -82,13 +100,27 @@
         # Use version to specify if a certain branch of Malcolm is what you want
         # should add functionality to comment this out if no repo_selector version is specified
         version: "{{ MALCOLM_VERSION }}"
+      when: MALCOLM_VERSION != ''
 
-      # uses the Malcolm script to automate building older docker malcolm images
-    - name: retag docker images so we can use older Malcolm versions if specified
+    # if no version is specified, then omit the version field and pull the latest release
+    - name: Git Clone Malcolm (latest version)
+      retries: 3
+      changed_when: false
+      ansible.builtin.git:
+        repo: "{{ MALCOLM_REPO }}"
+        clone: true
+        dest: /Malcolm
+        force: true
+      when: MALCOLM_VERSION == ''
+
+      # uses the builtin Malcolm helper script to retag so we can build older versions with no modification
+      # only run if specific version is used, I believe running it on the latest version breaks it
+    - name: retag docker images so we can use older Malcolm versions if specified without modification
       changed_when: false
       ansible.builtin.shell:
         chdir: /Malcolm/scripts
         cmd: "./github_image_helper.sh 4"
+      when: MALCOLM_VERSION != ''
 
     - name: change owner of Malcolm to vagrant user 
       become: true
@@ -118,10 +150,10 @@
       ansible.builtin.shell:
         chdir: /Malcolm/scripts/
         ## This one works with the latest version of malcolm, doesnt work for 23.12.1
-        cmd: "python3 /Malcolm/scripts/configure --defaults --restart-malcolm --auto-arkime --auto-suricata --auto-zeek --zeek-ics --zeek-ics-best-guess --auto-oui --auto-freq --file-extraction notcommtxt --file-preservation quarantined --extracted-file-server --extracted-file-server-password infected --extracted-file-server-zip --extracted-file-capa --extracted-file-clamav --extracted-file-yara --netbox --netbox-enrich --netbox-autopopulate false --netbox-site-name malcolm"
+        # cmd: "python3 /Malcolm/scripts/configure --defaults --restart-malcolm --auto-arkime --auto-suricata --auto-zeek --zeek-ics --zeek-ics-best-guess --auto-oui --auto-freq --file-extraction notcommtxt --file-preservation quarantined --extracted-file-server --extracted-file-server-password infected --extracted-file-server-zip --extracted-file-capa --extracted-file-clamav --extracted-file-yara --netbox --netbox-enrich --netbox-autopopulate false --netbox-site-name malcolm"
         
         # works for 23.12.1
-        # cmd: "python3 /Malcolm/scripts/configure --defaults --auto-arkime --auto-suricata --auto-zeek --zeek-ics --zeek-ics-best-guess --auto-oui --auto-freq"
+        cmd: "python3 /Malcolm/scripts/configure --defaults --auto-arkime --auto-suricata --auto-zeek --zeek-ics --zeek-ics-best-guess --auto-oui --auto-freq"
 
     - name: add vagrant as docker user
       become: true
@@ -147,7 +179,7 @@
       ansible.builtin.command:
         cmd: systemctl restart docker
 
-    - name: auth auth_setup
+    - name: configure auth_setup
       become_user: vagrant
       changed_when: false
       ansible.builtin.shell:
@@ -174,11 +206,21 @@
     ### Start of testing phase of playbook, time to upload and test pcaps in malcolm. Need to figure out how I want to make this extensible ###
     ###########################################################################################################################################
 
+    - name: Full-Scan pcap download
+      retries: 2
+      changed_when: false
+      ansible.builtin.git:
+        repo:  https://github.com/mmguero-dev/Malcolm-PCAP.git
+        clone: true
+        dest: /pcaps
+        force: true
+
+    # will need to change this when official repo is created. Also can look into making it be input by user if it should be dynamic
     - name: Pull PCAP test file repo
       retries: 2
       changed_when: false
       ansible.builtin.git:
-        repo: https://github.com/mmguero-dev/Malcolm-PCAP
+        repo:  https://github.com/Dmanzella/pcaps.git
         clone: true
         dest: /pcaps
         force: true
@@ -202,7 +244,7 @@
         chdir: /Malcolm/scripts/
         cmd: chmod +x /Malcolm/scripts/logstash_wait.sh
 
-    - name: run logstash_wait.sh until logstash is ready to ingest
+    - name: run logstash_wait.sh until logstash is ready to ingest pcaps
       changed_when: false
       ansible.builtin.shell:
         chdir: /Malcolm/scripts
@@ -219,7 +261,7 @@
 
           INDEX = 1
 
-          for file in /pcaps/pcaps/*.pcap; do
+          for file in /pcaps/*.pcap; do
               filename=$(basename "$file" .pcap)
               new_filename="tag$INDEX,${filename}.pcap"
 
@@ -241,6 +283,7 @@
         cmd: ./pcap_indexer.sh
 
     # this script waits for log count to remain idle (checking if all pcaps have been ingested)
+    # stolen from Seth in the Malcolm scripts directory
     # This will obviously take a lot of time if many pcaps are ingested, so keep that in mind when uploading pcaps
     - name: create seth's Malcolm processing checker
       changed_when: false
@@ -305,7 +348,7 @@
       ansible.builtin.command:
         cmd: "chmod +x /Malcolm/scripts/processing_check.sh"
 
-    - name: run processing_check.sh (This will take like 15 minutes as the pcap repo is currenlty massive)
+    - name: run processing_check.sh (This will take upwards of 15 minutes depending on how large and how many pcaps have been uploaded)
       changed_when: false 
       ansible.builtin.command:
         chdir: /Malcolm/scripts

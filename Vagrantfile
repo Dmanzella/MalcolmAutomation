@@ -73,7 +73,6 @@ Vagrant.configure("2") do |config|
   config.vm.hostname = "Malcolm"
 
   # # port forwarding rules so our host machine can access vm web interface, vagrant automatically sets up ssh for us, so just adding http/htpps
-  config.vm.network "forwarded_port", guest: 80, host: 6000
   config.vm.network "forwarded_port", guest: 443, host: 6001
 
 
