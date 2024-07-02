@@ -7,11 +7,13 @@
     MALCOLM_REPO: 'https://github.com/cisagov/Malcolm.git'
     MALCOLM_VERSION: ''
     
-    # variables to flip when user picks what test to run, might add support for specific protocol pcaps as well. CompleteTest.sh will modify these
-    LIGHT_TEST: 0
+    # variables to flip when user picks what test to run, might add support for specific protocol pcaps later as well. CompleteTest.sh will modify these for you
+    LIGHT_TEST: 1
     MEDIUM_TEST: 0
-    INTENSE_TEST: 1
+    INTENSE_TEST: 0
     FULL_SCALE_TEST: 0
+
+    TESTVAR: myvalue
 
   tasks:
 
@@ -70,12 +72,6 @@
         - docker-compose-plugin         
         state: present
         update_cache: true
-      # loop:
-      #   - docker-ce
-      #   - docker-ce-cli
-      #   - containerd.io
-      #   - docker-buildx-plugin
-      #   - docker-compose-plugin
 
     - name: install python packages
       changed_when: false
@@ -206,7 +202,7 @@
     ### Start of testing phase of playbook, time to upload and test pcaps in malcolm. Need to figure out how I want to make this extensible ###
     ###########################################################################################################################################
 
-    - name: Full-Scan pcap download
+    - name: Download main pcap git repo
       retries: 2
       changed_when: false
       ansible.builtin.git:
@@ -215,15 +211,15 @@
         dest: /pcaps
         force: true
 
-    # will need to change this when official repo is created. Also can look into making it be input by user if it should be dynamic
-    - name: Pull PCAP test file repo
-      retries: 2
-      changed_when: false
-      ansible.builtin.git:
-        repo:  https://github.com/Dmanzella/pcaps.git
-        clone: true
-        dest: /pcaps
-        force: true
+    # using this for testing as its much smaller and faster to ingest
+    # - name: Pull PCAP test file repo
+    #   retries: 2
+    #   changed_when: false
+    #   ansible.builtin.git:
+    #     repo:  https://github.com/Dmanzella/pcaps.git
+    #     clone: true
+    #     dest: /pcaps
+    #     force: true
 
     - name: Creating script to wait for logstash
       changed_when: false
@@ -261,7 +257,7 @@
 
           INDEX = 1
 
-          for file in /pcaps/*.pcap; do
+          for file in /pcaps/pcaps/*.pcap; do
               filename=$(basename "$file" .pcap)
               new_filename="tag$INDEX,${filename}.pcap"
 
