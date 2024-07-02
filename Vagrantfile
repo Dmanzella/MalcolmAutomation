@@ -73,6 +73,8 @@ Vagrant.configure("2") do |config|
   config.vm.hostname = "Malcolm"
 
   # # port forwarding rules so our host machine can access vm web interface, vagrant automatically sets up ssh for us, so just adding http/htpps
+  ## If using Virtualbox Provider, you will access Malcolm VM Web interaface on https://localhost:6001
+  ## Have not figured out a standard way to connect to libvirt vm web interface, still looking
   config.vm.network "forwarded_port", guest: 443, host: 6001
 
 

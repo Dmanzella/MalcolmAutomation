@@ -150,10 +150,10 @@
       ansible.builtin.shell:
         chdir: /Malcolm/scripts/
         ## This one works with the latest version of malcolm, doesnt work for 23.12.1
-        # cmd: "python3 /Malcolm/scripts/configure --defaults --restart-malcolm --auto-arkime --auto-suricata --auto-zeek --zeek-ics --zeek-ics-best-guess --auto-oui --auto-freq --file-extraction notcommtxt --file-preservation quarantined --extracted-file-server --extracted-file-server-password infected --extracted-file-server-zip --extracted-file-capa --extracted-file-clamav --extracted-file-yara --netbox --netbox-enrich --netbox-autopopulate false --netbox-site-name malcolm"
+        cmd: "python3 /Malcolm/scripts/configure --defaults --restart-malcolm --auto-arkime --auto-suricata --auto-zeek --zeek-ics --zeek-ics-best-guess --auto-oui --auto-freq --file-extraction notcommtxt --file-preservation quarantined --extracted-file-server --extracted-file-server-password infected --extracted-file-server-zip --extracted-file-capa --extracted-file-clamav --extracted-file-yara --netbox --netbox-enrich --netbox-autopopulate false --netbox-site-name malcolm"
         
         # works for 23.12.1
-        cmd: "python3 /Malcolm/scripts/configure --defaults --auto-arkime --auto-suricata --auto-zeek --zeek-ics --zeek-ics-best-guess --auto-oui --auto-freq"
+        # cmd: "python3 /Malcolm/scripts/configure --defaults --auto-arkime --auto-suricata --auto-zeek --zeek-ics --zeek-ics-best-guess --auto-oui --auto-freq"
 
     - name: add vagrant as docker user
       become: true

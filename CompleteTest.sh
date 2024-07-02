@@ -75,7 +75,7 @@ case $choice in
         ;;
     4)
         FULL_SCALE_TEST=1
-        sed -i "0,/^\(\s*\)FULL_SCALE_TEST:.*/ s|^\(\s*\)FULL_SCALE_TEST:.*|\1FULL_SCALE_TEST: $FULL_SCALE_TEST|" playbook.ymlcase 
+        sed -i "0,/^\(\s*\)FULL_SCALE_TEST:.*/ s|^\(\s*\)FULL_SCALE_TEST:.*|\1FULL_SCALE_TEST: $FULL_SCALE_TEST|" playbook.yml
         ;;
     *)
         echo "Invalid choice. Please enter a valid option."
