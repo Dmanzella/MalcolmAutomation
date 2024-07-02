@@ -71,7 +71,6 @@
           - urllib3
           - docker  
 
-    # This task sometimes take forever.....look into this later
     - name: Git Clone Malcolm
       retries: 3
       changed_when: false
@@ -242,6 +241,7 @@
         cmd: ./pcap_indexer.sh
 
     # this script waits for log count to remain idle (checking if all pcaps have been ingested)
+    # This will obviously take a lot of time if many pcaps are ingested, so keep that in mind when uploading pcaps
     - name: create seth's Malcolm processing checker
       changed_when: false
       ansible.builtin.copy:
