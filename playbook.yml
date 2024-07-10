@@ -6,19 +6,8 @@
   vars:
     MALCOLM_REPO: 'https://github.com/cisagov/Malcolm.git'
     MALCOLM_VERSION: ''
-    
-    # variables to flip when user picks what test to run, might add support for specific protocol pcaps later as well. CompleteTest.sh will modify these for you
-    LIGHT_TEST: 1
-    MEDIUM_TEST: 0
-    INTENSE_TEST: 0
-    FULL_SCALE_TEST: 0
 
   tasks:
-
-    - name: light is true test
-      ansible.builtin.pause:
-        seconds: 1
-      when: LIGHT_TEST == 1
 
     - name: Install Aptitude
       retries: 2
@@ -200,25 +189,12 @@
     ### Start of testing phase of playbook, time to upload and test pcaps in malcolm. Need to figure out how I want to make this extensible ###
     ###########################################################################################################################################
 
-    - name: Download main pcap git repo
-      retries: 2
-      changed_when: false
-      ansible.builtin.git:
-        repo:  https://github.com/mmguero-dev/Malcolm-PCAP.git
-        clone: true
-        dest: /pcaps
-        force: true
+    - name: upload pcaps specified in config.json to Malcolm
+      changed_when: false 
+      ansible.builtin.shell:
+        cmd: cp /vagrant/Tests/* /Malcolm/pcap/upload/
 
-    # using this for testing as its much smaller and faster to ingest
-    # - name: Pull PCAP test file repo
-    #   retries: 2
-    #   changed_when: false
-    #   ansible.builtin.git:
-    #     repo:  https://github.com/Dmanzella/pcaps.git
-    #     clone: true
-    #     dest: /pcaps
-    #     force: true
-
+    # Logstash tasks are there to verify that Malcolm is ready for pcaps to be ingested
     - name: Creating script to wait for logstash
       changed_when: false
       ansible.builtin.copy:
@@ -246,35 +222,35 @@
 
     #  This is the tagging task, modify as needed for tests. Currently I am indexing every pcap so each has a unique number to reference it
     #  The very first tag is not given a number... need to fix this, the second pcap starts at 1 and the each one counts up
-    - name: create script that indexes all test pcap files in a directory, for each test level
-      changed_when: false
-      ansible.builtin.copy:
-        dest:  /Malcolm/scripts/pcap_indexer.sh
-        content: |
-          #!/bin/bash
+    # - name: create script that indexes all test pcap files in a directory, for each test level
+    #   changed_when: false
+    #   ansible.builtin.copy:
+    #     dest:  /Malcolm/scripts/pcap_indexer.sh
+    #     content: |
+    #       #!/bin/bash
 
-          INDEX = 1
+    #       INDEX = 1
 
-          for file in /pcaps/pcaps/*.pcap; do
-              filename=$(basename "$file" .pcap)
-              new_filename="tag$INDEX,${filename}.pcap"
+    #       for file in /pcaps/pcaps/*.pcap; do
+    #           filename=$(basename "$file" .pcap)
+    #           new_filename="tag$INDEX,${filename}.pcap"
 
-              mv "$file" /Malcolm/pcap/upload/"$new_filename"
-              ((INDEX++))
-          done
+    #           mv "$file" /Malcolm/pcap/upload/"$new_filename"
+    #           ((INDEX++))
+    #       done
 
-    - name: make pcap_indexer.sh executable
-      become: true
-      changed_when: false
-      ansible.builtin.shell:
-        cmd: chmod +x /Malcolm/scripts/pcap_indexer.sh
+    # - name: make pcap_indexer.sh executable
+    #   become: true
+    #   changed_when: false
+    #   ansible.builtin.shell:
+    #     cmd: chmod +x /Malcolm/scripts/pcap_indexer.sh
 
-    - name: run pcap_indexer.sh
-      changed_when: false
-      become: true
-      ansible.builtin.shell:
-        chdir: /Malcolm/scripts
-        cmd: ./pcap_indexer.sh
+    # - name: run pcap_indexer.sh
+    #   changed_when: false
+    #   become: true
+    #   ansible.builtin.shell:
+    #     chdir: /Malcolm/scripts
+    #     cmd: ./pcap_indexer.sh
 
     # this script waits for log count to remain idle (checking if all pcaps have been ingested)
     # stolen from Seth in the Malcolm scripts directory
@@ -342,7 +318,7 @@
       ansible.builtin.command:
         cmd: "chmod +x /Malcolm/scripts/processing_check.sh"
 
-    - name: run processing_check.sh (This will take upwards of 15 minutes depending on how large and how many pcaps have been uploaded)
+    - name: run processing_check.sh (This will take upwards of 15 minutes depending on how large and how many pcaps have been ingested)
       changed_when: false 
       ansible.builtin.command:
         chdir: /Malcolm/scripts

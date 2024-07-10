@@ -14,9 +14,10 @@ packages=(
     ansible
     sshpass
     wget
+    jq
 )
 
-# install core dependencies
+# install dependency list
 for package in "${packages[@]}"; do
     if is_package_installed "$package"; then
         echo "$package is already installed."
@@ -104,5 +105,5 @@ case $choice in
         ;;
 esac
 
-echo "Setup complete for the selected VM provider."
+echo "Setup complete for the selected VM provider, ready to run CompleteTest.sh."
 echo ""

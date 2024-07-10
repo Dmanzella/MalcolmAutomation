@@ -15,13 +15,12 @@ Vagrant.configure("2") do |config|
   config.vm.hostname = "Malcolm"
   config.vm.box_download_insecure = true
 
-  ## If using Virtualbox Provider, you will access Malcolm VM Web interaface on https://localhost:6001
-  ## Have not figured out a standardized way to connect to libvirt vm web interface, still looking
+  ## If using Virtualbox Provider, you will access Malcolm VM Web interaface on https://localhost:8080
+  ## Have not figured out a standardized way to connect to libvirt vm web interface, still looking. Currenlty need to use it dhcp assigned IP.
   config.vm.network "private_network", type: "dhcp"
-  config.vm.network "forwarded_port", guest: 443, host: 8080
+  config.vm.network "forwarded_port", guest: 443, host: 6001
 
   config.ssh.insert_key = false
-  config.vm.synced_folder ".", "/vagrant", disabled: true
 
   ## If using Virtualbox Provider, you will access Malcolm VM Web interaface on https://localhost:6001
   ## Have not figured out a standard way to connect to libvirt vm web interface, still looking

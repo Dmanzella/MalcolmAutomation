@@ -1,0 +1,8 @@
+{
+  "pcaps_to_test": [
+     "BACnet.pcap",
+     "FTP.pcap",
+     "LDAP.pcap",
+     "SSH.pcap"
+  ]
+}

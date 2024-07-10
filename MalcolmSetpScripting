@@ -1,5 +1,0 @@
-# not necessary, have this here for my reference of what cmdline args you can pass to setup malcolm.
-# these work for Malcolm version 24.06.0
-
-python3 /Malcolm/scripts/auth_setup --auth-noninteractive --auth-admin-username analyst --auth-admin-password-openssl '$1$owXoS5pf$YesZKhhWS0d3zVUUhdcef0' --auth-admin-password-htpasswd '$2y$05$a8jiJsLZ1mFnt5srJD3HAOKC8IUaZcOlsqp8txBlmMjW6wUXUtN3S' --auth-generate-webcerts --auth-generate-fwcerts --auth-generate-netbox-passwords
-python3 /Malcolm/scripts/configure --defaults --restart-malcolm --auto-arkime --auto-suricata --auto-zeek --zeek-ics --zeek-ics-best-guess --auto-oui --auto-freq --file-extraction notcommtxt --file-preservation quarantined --extracted-file-server --extracted-file-server-password infected --extracted-file-server-zip --extracted-file-capa --extracted-file-clamav --extracted-file-yara --netbox --netbox-enrich --netbox-autopopulate false --netbox-preload-prefixes --netbox-site-name malcolm
