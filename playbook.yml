@@ -2,12 +2,23 @@
 - hosts: all
   become: yes
 
-  # Repo Selector will automate changing repo and version
+  # CompleteTest.sh will walk user through setting these variables
   vars:
     MALCOLM_REPO: 'https://github.com/cisagov/Malcolm.git'
-    MALCOLM_VERSION: 'v24.05.0'
+    MALCOLM_VERSION: ''
+    
+    # variables to flip when user picks what test to run, might add support for specific protocol pcaps later as well. CompleteTest.sh will modify these for you
+    LIGHT_TEST: 1
+    MEDIUM_TEST: 0
+    INTENSE_TEST: 0
+    FULL_SCALE_TEST: 0
 
   tasks:
+
+    - name: light is true test
+      ansible.builtin.pause:
+        seconds: 1
+      when: LIGHT_TEST == 1
 
     - name: Install Aptitude
       retries: 2
@@ -18,7 +29,7 @@
         state: latest
         update_cache: true
 
-    - name: "Install Packages (May take a bit :)"
+    - name: "Installing Packages"
       changed_when: false
       ansible.builtin.apt:
         pkg:
@@ -50,15 +61,15 @@
     - name: Install Docker and related packages
       changed_when: false
       ansible.builtin.apt:
-        name: "{{ item }}"
-        state: present
-        update_cache: true
-      loop:
+        # name: "{{ item }}"
+        pkg:
         - docker-ce
         - docker-ce-cli
         - containerd.io
         - docker-buildx-plugin
-        - docker-compose-plugin
+        - docker-compose-plugin         
+        state: present
+        update_cache: true
 
     - name: install python packages
       changed_when: false
@@ -71,7 +82,8 @@
           - urllib3
           - docker  
 
-    - name: Git Clone Malcolm
+    # if malcom version is specified, then pull specific malcolm version
+    - name: Git Clone Malcolm (specific version)
       retries: 3
       changed_when: false
       ansible.builtin.git:
@@ -82,13 +94,27 @@
         # Use version to specify if a certain branch of Malcolm is what you want
         # should add functionality to comment this out if no repo_selector version is specified
         version: "{{ MALCOLM_VERSION }}"
+      when: MALCOLM_VERSION != ''
 
-      # uses the Malcolm script to automate building older docker malcolm images
-    - name: retag docker images so we can use older Malcolm versions if specified
+    # if no version is specified, then omit the version field and pull the latest release
+    - name: Git Clone Malcolm (latest version)
+      retries: 3
+      changed_when: false
+      ansible.builtin.git:
+        repo: "{{ MALCOLM_REPO }}"
+        clone: true
+        dest: /Malcolm
+        force: true
+      when: MALCOLM_VERSION == ''
+
+      # uses the builtin Malcolm helper script to retag so we can build older versions with no modification
+      # only run if specific version is used, I believe running it on the latest version breaks it
+    - name: retag docker images so we can use older Malcolm versions if specified without modification
       changed_when: false
       ansible.builtin.shell:
         chdir: /Malcolm/scripts
         cmd: "./github_image_helper.sh 4"
+      when: MALCOLM_VERSION != ''
 
     - name: change owner of Malcolm to vagrant user 
       become: true
@@ -147,7 +173,7 @@
       ansible.builtin.command:
         cmd: systemctl restart docker
 
-    - name: auth auth_setup
+    - name: configure auth_setup
       become_user: vagrant
       changed_when: false
       ansible.builtin.shell:
@@ -174,14 +200,24 @@
     ### Start of testing phase of playbook, time to upload and test pcaps in malcolm. Need to figure out how I want to make this extensible ###
     ###########################################################################################################################################
 
-    - name: Pull PCAP test file repo
+    - name: Download main pcap git repo
       retries: 2
       changed_when: false
       ansible.builtin.git:
-        repo: https://github.com/mmguero-dev/Malcolm-PCAP
+        repo:  https://github.com/mmguero-dev/Malcolm-PCAP.git
         clone: true
         dest: /pcaps
         force: true
+
+    # using this for testing as its much smaller and faster to ingest
+    # - name: Pull PCAP test file repo
+    #   retries: 2
+    #   changed_when: false
+    #   ansible.builtin.git:
+    #     repo:  https://github.com/Dmanzella/pcaps.git
+    #     clone: true
+    #     dest: /pcaps
+    #     force: true
 
     - name: Creating script to wait for logstash
       changed_when: false
@@ -202,7 +238,7 @@
         chdir: /Malcolm/scripts/
         cmd: chmod +x /Malcolm/scripts/logstash_wait.sh
 
-    - name: run logstash_wait.sh until logstash is ready to ingest
+    - name: run logstash_wait.sh until logstash is ready to ingest pcaps
       changed_when: false
       ansible.builtin.shell:
         chdir: /Malcolm/scripts
@@ -210,7 +246,7 @@
 
     #  This is the tagging task, modify as needed for tests. Currently I am indexing every pcap so each has a unique number to reference it
     #  The very first tag is not given a number... need to fix this, the second pcap starts at 1 and the each one counts up
-    - name: create script that indexes all test pcap files in a directory 
+    - name: create script that indexes all test pcap files in a directory, for each test level
       changed_when: false
       ansible.builtin.copy:
         dest:  /Malcolm/scripts/pcap_indexer.sh
@@ -241,6 +277,7 @@
         cmd: ./pcap_indexer.sh
 
     # this script waits for log count to remain idle (checking if all pcaps have been ingested)
+    # stolen from Seth in the Malcolm scripts directory
     # This will obviously take a lot of time if many pcaps are ingested, so keep that in mind when uploading pcaps
     - name: create seth's Malcolm processing checker
       changed_when: false
@@ -305,7 +342,7 @@
       ansible.builtin.command:
         cmd: "chmod +x /Malcolm/scripts/processing_check.sh"
 
-    - name: run processing_check.sh (This will take like 15 minutes as the pcap repo is currenlty massive)
+    - name: run processing_check.sh (This will take upwards of 15 minutes depending on how large and how many pcaps have been uploaded)
       changed_when: false 
       ansible.builtin.command:
         chdir: /Malcolm/scripts

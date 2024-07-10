@@ -5,7 +5,8 @@ vagrant init generic/ubuntu2204
 ########################################
 # Vagrant commands to be familiar with #
 ########################################
-vagrant up		# builds VM was specified in Vagrantfile
+
+vagrant up		    # builds VM as specified in Vagrantfile
 vagrant destroy		# deletes and removes running VM that was specified in the Vagrantfile
-vagrant provision	# runs an ansible playbook on an already running VM.
-vagrant ssh		# directly SSH into the running VM
+vagrant provision	# runs an ansible playbook on an already running VM. Nice to use when modifying your Ansible playbook.
+vagrant ssh		    # directly SSH into the running vagrant VM. Can also manually ssh but this is faster.
