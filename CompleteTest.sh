@@ -3,6 +3,10 @@
 VBOX=0
 VMWARE=0
 LIBVIRT=0
+<<<<<<< HEAD
+=======
+PARALLELS=0
+>>>>>>> 16526a281e31abac6aad4b2160fae2f3e3b633f2
 LIGHT_TEST=0
 MEDIUM_TEST=0
 INTENSE_TEST=0
@@ -12,7 +16,12 @@ echo "Who do you want to build your Malcolm VM (must already be installed and co
 echo "1. VirtualBox"
 echo "2. VMware"
 echo "3. libvirt"
+<<<<<<< HEAD
 read -p "Enter your choice (1-3): " choice
+=======
+echo "4. parallels (Mac only)"
+read -p "Enter your choice (1-4): " choice
+>>>>>>> 16526a281e31abac6aad4b2160fae2f3e3b633f2
 echo ""
 
 #check if libvirt, virtualbox, or vmware, parallels
@@ -25,10 +34,13 @@ case $choice in
         ;;
     3)
         LIBVIRT=1
+<<<<<<< HEAD
         ;;
     *)
         echo "Invalid choice. Please enter a valid option."
         exit 1
+=======
+>>>>>>> 16526a281e31abac6aad4b2160fae2f3e3b633f2
         ;;
 esac
 
