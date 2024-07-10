@@ -4,6 +4,9 @@
 export ANSIBLE_NOCOWS=1
 
 RED='\033[0;31m'
+NC='\033[0m'
+
+TAGS=()
 
 VBOX=0
 VMWARE=0
@@ -14,7 +17,7 @@ echo "1. VirtualBox"
 echo "2. VMware"
 echo "3. libvirt"
 read -p "Enter your choice (1-3): " choice
-echo ""
+echo "--------------------"
 
 #check if libvirt, virtualbox, or vmware, parallels
 case $choice in
@@ -33,7 +36,7 @@ case $choice in
         ;;
 esac
 
-# Bash script to select Git repo and version to update Ansible playbook
+# function to select Git repo and version to update Ansible playbook
 update_playbook() {
     local repo_url="$1"
     local version="$2"
@@ -43,6 +46,7 @@ update_playbook() {
     sed -i "s|^\(\s*\)MALCOLM_VERSION:.*|\1MALCOLM_VERSION: '$version'|" playbook.yml
     
     echo "Ansible playbook updated successfully with repo URL: $repo_url and version: $version"
+    echo ""
 }
 
 
@@ -54,6 +58,7 @@ echo "3. https://github.com/idaholab/Malcolm"
 echo "4. Other (Enter custom URL)"
 
 read -p "Enter your choice (1, 2, 3, or Custom URL): " choice
+echo "--------------------"
 
 case $choice in
     1)
@@ -84,26 +89,37 @@ if [ ! -f "config.json" ]; then
     exit 1
 fi
 
+# read pcaps from config.json, remove all pcaps in Tests and add new ones to it
 pcaps_to_test=($(jq -r '.pcaps_to_test[]' config.json))
 
 mkdir -p Tests
+mkdir -p Checks
 rm -f Tests/*
+rm -f Checks/*
 
 for pcap in "${pcaps_to_test[@]}"; do
     if [ -f "Pcaps/$pcap" ]; then
         cp "Pcaps/$pcap" "Tests/"
-        echo "Moved $pcap to Tests/ folder"
+        echo "Copied $pcap to Tests/ folder"
+
+        pcap_no_ext="${pcap%.*}"
+        TAGS+=("$pcap_no_ext")
+
+        if [ -f "Pcaps/checks/$pcap_no_ext.json" ]; then
+            cp "Pcaps/checks/$pcap_no_ext.json" "Checks/"
+            echo "Copied $pcap_no_ext.json to Checks/ folder"
+        else
+            echo -e "${RED} Warning: $pcap_no_ext.json not found in /Pcaps/checks. Skipping ${NC}"
+        fi
     else
-        echo -e "${RED} Warning: $pcap not found in Pcaps/. skipping"
+        echo -e "${RED} Warning: $pcap not found in Pcaps/. Skipping ${NC}"
     fi
 done
 
-# List pcap array of current test as specified in config.json
-for ingested in "${pcaps_to_test[@]}"; do
-    echo "$ingested"
+#this array stores the tags of the pcaps run during this test. Use this for the api calls and what files to commpare against.
+for tag in "${TAGS[@]}"; do 
+    echo "$tag"
 done
-
-
 
 
 
@@ -117,6 +133,9 @@ fi
 
 if [ $VBOX -eq 1 ]; then
     sudo vagrant up --provider virtualbox
+
+    
+
     sshpass -p "vagrant" scp -P 2222 -r vagrant@localhost:/ApiTesting . && echo "malcolm api json data copied to ApiTesting/"
 fi
 
