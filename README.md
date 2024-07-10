@@ -6,4 +6,7 @@ Run setup.sh to configure your environment and install all the required dependen
 
 The testing is still a work in progress, but the idea is to be able to specify exactly what pcaps for Malcolm to ingest, tag every pcap uniquely, then run api calls against every tag produced to see if they match the known good output for each pcap.
 
+Modify config.json and add what pcaps you want to test from the Pcaps directory, these will be ingested, tested, and verified.
+If you plan on adding new pcaps into the Pcaps directory, you must also add a json file with the same filename as its respective pcap with the expetced output of the test api call for that pcap so the tool knows how to verify it is right.
+
 List of every available pcap to test with this tool came from https://github.com/mmguero-dev/Malcolm-PCAP
