@@ -4,6 +4,7 @@
 export ANSIBLE_NOCOWS=1
 
 RED='\033[0;31m'
+GREEN='\033[0;32m'
 NC='\033[0m'
 
 TAGS=()
@@ -92,36 +93,34 @@ fi
 # read pcaps from config.json, remove all pcaps in Tests and add new ones to it
 pcaps_to_test=($(jq -r '.pcaps_to_test[]' config.json))
 
-mkdir -p Tests
-mkdir -p Checks
-rm -f Tests/*
-rm -f Checks/*
+mkdir -p tests
+# mkdir -p checks
+rm -f tests/*
+# rm -f checks/*
 
 for pcap in "${pcaps_to_test[@]}"; do
-    if [ -f "Pcaps/$pcap" ]; then
-        cp "Pcaps/$pcap" "Tests/"
-        echo "Copied $pcap to Tests/ folder"
+    if [ -f "pcaps/$pcap" ]; then
+        cp "pcaps/$pcap" "tests/"
+        echo "Copied $pcap to tests/ folder"
 
         pcap_no_ext="${pcap%.*}"
         TAGS+=("$pcap_no_ext")
 
-        if [ -f "Pcaps/checks/$pcap_no_ext.json" ]; then
-            cp "Pcaps/checks/$pcap_no_ext.json" "Checks/"
-            echo "Copied $pcap_no_ext.json to Checks/ folder"
-        else
-            echo -e "${RED} Warning: $pcap_no_ext.json not found in /Pcaps/checks. Skipping ${NC}"
-        fi
+        # if [ -f "Pcaps/checks/$pcap_no_ext.json" ]; then
+        #     cp "Pcaps/checks/$pcap_no_ext.json" "Checks/"
+        #     echo "Copied $pcap_no_ext.json to Checks/ folder"
+        # else
+        #     echo -e "${RED} Warning: $pcap_no_ext.json not found in /Pcaps/checks. Skipping ${NC}"
+        # fi
     else
-        echo -e "${RED} Warning: $pcap not found in Pcaps/. Skipping ${NC}"
+        echo -e "${RED} Warning: $pcap not found in pcaps/. Skipping ${NC}"
     fi
 done
 
 #this array stores the tags of the pcaps run during this test. Use this for the api calls and what files to commpare against.
-for tag in "${TAGS[@]}"; do 
-    echo "$tag"
-done
-
-
+# for tag in "${TAGS[@]}"; do 
+#     echo "tag: $tag"
+# done
 
 if [ $LIBVIRT -eq 1 ]; then    
     sudo vagrant up --provider libvirt
@@ -132,11 +131,35 @@ if [ $VMWARE -eq 1 ]; then
 fi
 
 if [ $VBOX -eq 1 ]; then
+    # kick off our Malcolm VM getting built
     sudo vagrant up --provider virtualbox
 
-    
+    # Ping Check
+    curl -k --location 'https://localhost:6001/mapi/ping' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > results/ping.json
+    if [ -f "pcaps/checks/ping.json" ] && [ -f "results/ping.json" ]; then
+        diff "pcaps/checks/ping.json" "results/ping.json" > /dev/null
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}Ping test succesful${NC}"
+        else
+            echo -e "${RED}Ping test failed${NC}"
+            diff "pcaps/checks/ping.json" "results/ping.json"
+        fi
+    else
+        echo -e "${RED}Error: Missing check file or result file for tag '${tag}'.${NC}"
+    fi
 
-    sshpass -p "vagrant" scp -P 2222 -r vagrant@localhost:/ApiTesting . && echo "malcolm api json data copied to ApiTesting/"
+
+
+    #This loop will do an api call for each tag (pcap) ingested during the test
+    for tag in "${TAGS[@]}"; do 
+        echo "in progress"
+        # curl -k --location 'https://localhost:6001/mapi/agg/user_agent.original?from=1970' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt'
+
+
+
+    done
+
+    # sshpass -p "vagrant" scp -P 2222 -r vagrant@localhost:/ApiTesting . && echo "malcolm api json data copied to ApiTesting/"
 fi
 
 # commented out for now to make testing faster

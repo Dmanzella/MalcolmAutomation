@@ -112,14 +112,7 @@
         chdir: /Malcolm
         cmd: "chown -R vagrant:vagrant ."
 
-    # - name: Remove lines 2982-2911 from install.py so it doesn't stall
-    #   become: true 
-    #   changed_when: false
-    #   shell:
-    #     cmd: "sed -i '2892,2911d' /Malcolm/scripts/install.py"
-
-    # This now works after removing the ~20 lines from the previous task, gets python packages
-    - name: Run install.py as vagrant
+    - name: Run install.py as vagrant (if this fails, its probably due to a new version having different command line arguments, you might need to update the arguments for this script)
       become_user: vagrant
       changed_when: false
       ansible.builtin.shell:
@@ -127,7 +120,7 @@
         cmd: ./install.py --defaults --restart-malcolm
 
     #### Works now after removing only the "--netbox-preload-prefixes"
-    - name: Run configure script
+    - name: Run configure script (if this fails, its probably due to a new version of Malcolm having different command line arguments, you might need to update the arguments for this script)
       become_user: vagrant
       changed_when: false
       ansible.builtin.shell:
@@ -162,7 +155,7 @@
       ansible.builtin.command:
         cmd: systemctl restart docker
 
-    - name: configure auth_setup
+    - name: configure auth_setup (if this fails, its probably due to a new version having different command line arguments, you might need to update the arguments for this script)
       become_user: vagrant
       changed_when: false
       ansible.builtin.shell:
@@ -176,7 +169,7 @@
         chdir: /Malcolm
         cmd: "docker compose --profile malcolm pull"
 
-    - name: start malcolm
+    - name: start malcolm (will take a few minutes)
       become_user: vagrant
       retries: 5
       changed_when: false
@@ -189,10 +182,10 @@
     ### Start of testing phase of playbook, time to upload and test pcaps in malcolm. Need to figure out how I want to make this extensible ###
     ###########################################################################################################################################
 
-    - name: upload pcaps specified in config.json to Malcolm
+    - name: move pcaps specified in config.json to Malcolm
       changed_when: false 
       ansible.builtin.shell:
-        cmd: cp /vagrant/Tests/* /Malcolm/pcap/upload/
+        cmd: mv /vagrant/Tests/* /Malcolm/pcap/upload/
 
     # Logstash tasks are there to verify that Malcolm is ready for pcaps to be ingested
     - name: Creating script to wait for logstash
@@ -333,59 +326,63 @@
       ansible.builtin.command:
         cmd: mkdir /ApiTesting
 
-    - name: api call to ping 
-      changed_when: false
-      ansible.builtin.shell:
-        chdir: /ApiTesting
-        cmd: "curl -k --location 'https://localhost/mapi/ping' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > ping.json"
+    # - name: api call to ping 
+    #   changed_when: false
+    #   ansible.builtin.shell:
+    #     chdir: /ApiTesting
+    #     cmd: "curl -k --location 'https://localhost/mapi/ping' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > ping.json"
 
-    - name: api call to fields
-      changed_when: false
-      ansible.builtin.shell:
-        chdir: /ApiTesting
-        cmd: "curl -k --location 'https://localhost/mapi/fields' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > fields.json"
+    ###
+    ### These are some example api calls you can make to Malcolm
+    ### 
 
-    - name: api call to indices
-      changed_when: false
-      ansible.builtin.shell:
-        chdir: /ApiTesting
-        cmd: "curl -k --location 'https://localhost/mapi/indices' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > indices.json" 
+    # - name: api call to fields
+    #   changed_when: false
+    #   ansible.builtin.shell:
+    #     chdir: /ApiTesting
+    #     cmd: "curl -k --location 'https://localhost/mapi/fields' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > fields.json"
+
+    # - name: api call to indices
+    #   changed_when: false
+    #   ansible.builtin.shell:
+    #     chdir: /ApiTesting
+    #     cmd: "curl -k --location 'https://localhost/mapi/indices' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > indices.json" 
     
-    - name: api call to version
-      changed_when: false
-      ansible.builtin.shell:
-        chdir: /ApiTesting 
-        cmd: "curl -k --location 'https://localhost/mapi/version' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > version.json"
+    # - name: api call to version
+    #   changed_when: false
+    #   ansible.builtin.shell:
+    #     chdir: /ApiTesting 
+    #     cmd: "curl -k --location 'https://localhost/mapi/version' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > version.json"
 
-    - name: api call to agg for user agents
-      changed_when: false
-      ansible.builtin.shell:
-        chdir: /ApiTesting
-        cmd: "curl -k --location 'https://localhost/mapi/agg/user_agent.original?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > user_agent.json"
+    # - name: api call to agg for user agents
+    #   changed_when: false
+    #   ansible.builtin.shell:
+    #     chdir: /ApiTesting
+    #     cmd: "curl -k --location 'https://localhost/mapi/agg/user_agent.original?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > user_agent.json"
 
-    - name: api call to agg for protocols
-      changed_when: false
-      ansible.builtin.shell:
-        chdir: /ApiTesting
-        cmd: "curl -k --location 'https://localhost/mapi/agg/network.transport,network.protocol,network.protocol_version?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > protocols.json"
+    # - name: api call to agg for protocols
+    #   changed_when: false
+    #   ansible.builtin.shell:
+    #     chdir: /ApiTesting
+    #     cmd: "curl -k --location 'https://localhost/mapi/agg/network.transport,network.protocol,network.protocol_version?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > protocols.json"
 
-    - name: api call to agg for software-properties-common
-      changed_when: false
-      ansible.builtin.shell:
-        chdir: /ApiTesting
-        cmd: "curl -k --location 'https://localhost/mapi/agg/zeek.software.name,zeek.software.unparsed_version?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > software.json"
+    # - name: api call to agg for software-properties-common
+    #   changed_when: false
+    #   ansible.builtin.shell:
+    #     chdir: /ApiTesting
+    #     cmd: "curl -k --location 'https://localhost/mapi/agg/zeek.software.name,zeek.software.unparsed_version?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > software.json"
 
-    - name: api call to agg for notice categories
-      changed_when: false
-      ansible.builtin.shell:
-        chdir: /ApiTesting
-        cmd: "curl -k --location 'https://localhost/mapi/agg/zeek.notice.category,zeek.notice.sub_category?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > notice_catrgories.json"
+    # - name: api call to agg for notice categories
+    #   changed_when: false
+    #   ansible.builtin.shell:
+    #     chdir: /ApiTesting
+    #     cmd: "curl -k --location 'https://localhost/mapi/agg/zeek.notice.category,zeek.notice.sub_category?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > notice_catrgories.json"
 
-    - name: api call to agg for severity tags
-      changed_when: false
-      ansible.builtin.shell:
-        chdir: /ApiTesting
-        cmd: "curl -k --location 'https://localhost/mapi/agg/event.severity_tags?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > severity_tags.json"
+    # - name: api call to agg for severity tags
+    #   changed_when: false
+    #   ansible.builtin.shell:
+    #     chdir: /ApiTesting
+    #     cmd: "curl -k --location 'https://localhost/mapi/agg/event.severity_tags?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > severity_tags.json"
 
     - name: chown api data to vagrant so we can scp them from host
       changed_when: false
