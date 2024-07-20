@@ -52,7 +52,8 @@ case $choice in
         # Check if VMware is installed
         if ! command -v vmrun &> /dev/null
         then
-            echo "You will need to install vmware manually from the Broadcom site https://knowledge.broadcom.com/external/article/368667/download-and-license-information-for-vmw.html"   
+            echo "You will need to install vmware manually from the Broadcom site https://knowledge.broadcom.com/external/article/368667/download-and-license-information-for-vmw.html" 
+            sudo apt-get -y install open-vm-tools  
         fi
 
         # install vmware-vagrant utility

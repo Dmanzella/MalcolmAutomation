@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# For debugging/troubleshooting VM issues, use sudo vagrant ssh in the Vagrantfile directory to ssh into the box
+
 # I have seen one too many cows
 export ANSIBLE_NOCOWS=1
 
@@ -96,6 +98,7 @@ pcaps_to_test=($(jq -r '.pcaps_to_test[]' config.json))
 mkdir -p tests
 # mkdir -p checks
 rm -f tests/*
+rm -f results/*
 # rm -f checks/*
 
 for pcap in "${pcaps_to_test[@]}"; do
@@ -124,18 +127,52 @@ done
 
 if [ $LIBVIRT -eq 1 ]; then    
     sudo vagrant up --provider libvirt
+
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}Error: Failed to start the Vagrant VM or Ansible playbook failed.${NC}"
+        exit 1 
+    fi
+
+    curl -k --location 'https://localhost:8080/mapi/ping' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > results/ping.json
+    if [ -f "pcaps/checks/ping.json" ] && [ -f "results/ping.json" ]; then
+        diff "pcaps/checks/ping.json" "results/ping.json" > /dev/null
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}Ping test succesful${NC}"
+        else
+            echo -e "${RED}Ping test failed${NC}"
+            diff "pcaps/checks/ping.json" "results/ping.json"
+        fi
+    else
+        echo -e "${RED}Error: Missing check file or result file for tag '${tag}'.${NC}"
+    fi
+
+    #This loop will do an api call for each tag (pcap) ingested during the test
+    for tag in "${TAGS[@]}"; do 
+        echo "in progress"
+        # curl -k --location 'https://localhost:6001/mapi/agg/user_agent.original?from=1970' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt'
+
+
+
+    done
+
 fi
 
+# not working as of now
 if [ $VMWARE -eq 1 ]; then    
     sudo vagrant up --provider vmware_desktop
 fi
 
 if [ $VBOX -eq 1 ]; then
     # kick off our Malcolm VM getting built
-    sudo vagrant up --provider virtualbox
+    # sudo vagrant up --provider virtualbox
+
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}Error: Failed to start the Vagrant VM or Ansible playbook failed.${NC}"
+        exit 1 
+    fi
 
     # Ping Check
-    curl -k --location 'https://localhost:6001/mapi/ping' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > results/ping.json
+    curl -k --location 'https://localhost:8080/mapi/ping' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > results/ping.json
     if [ -f "pcaps/checks/ping.json" ] && [ -f "results/ping.json" ]; then
         diff "pcaps/checks/ping.json" "results/ping.json" > /dev/null
         if [ $? -eq 0 ]; then
@@ -149,17 +186,24 @@ if [ $VBOX -eq 1 ]; then
     fi
 
 
-
     #This loop will do an api call for each tag (pcap) ingested during the test
     for tag in "${TAGS[@]}"; do 
         echo "in progress"
-        # curl -k --location 'https://localhost:6001/mapi/agg/user_agent.original?from=1970' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt'
 
+        # This pulls every session in arkime with the specified tag, loops through all tags used for this test
+        # Also removes recordsTotal data as it changes based on how many pcaps were ingested which would break our tests
+        curl -k --location "https://localhost:8080/arkime/api/sessions?expression=tags%3d%3d${tag}&date=-1" --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > results/${tag}.json
+        sed -i 's/"recordsTotal":[0-9]*,//' "results/$tag.json"
 
+        if diff --ignore-trailing-space pcaps/checks/$tag.json results/$tag.json &>/dev/null; then 
+            echo -e "${GREEN}$tag test was successful${NC}"
+        else
+            echo -e "${RED}$tag test failed${NC}"
+            diff --ignore-trailing-space pcaps/checks/$tag.json results/$tag.json
+        fi
 
     done
 
-    # sshpass -p "vagrant" scp -P 2222 -r vagrant@localhost:/ApiTesting . && echo "malcolm api json data copied to ApiTesting/"
 fi
 
 # commented out for now to make testing faster

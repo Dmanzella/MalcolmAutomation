@@ -10,20 +10,19 @@ Vagrant.configure("2") do |config|
   # using a specific IP.
   # config.vm.network "private_network", ip: "192.168.33.10"
 
-  config.vm.box = "bento/ubuntu-20.04"
+  config.vm.box = "bento/ubuntu-22.04"
+  config.vm.box_version = "202309.08.0"
   config.vm.disk :disk, size: "150GB", primary: true
   config.vm.hostname = "Malcolm"
   config.vm.box_download_insecure = true
 
+  # config.vm.synced_folder ".", "/vagrant", type: "nfs", mount_options: ["vers=3,tcp"]
+
   ## If using Virtualbox Provider, you will access Malcolm VM Web interaface on https://localhost:8080
-  ## Have not figured out a standardized way to connect to libvirt vm web interface, still looking. Currenlty need to use it dhcp assigned IP.
-  config.vm.network "private_network", type: "dhcp"
-  config.vm.network "forwarded_port", guest: 443, host: 6001
+  ## Have not figured out a standardized way to connect to libvirt vm web interface, still looking. Currenlty need to use it dhcp assigned IP to access web interface from your host.
 
   config.ssh.insert_key = false
 
-  ## If using Virtualbox Provider, you will access Malcolm VM Web interaface on https://localhost:6001
-  ## Have not figured out a standard way to connect to libvirt vm web interface, still looking
   config.vm.network "private_network", type: "dhcp"
   config.vm.network "forwarded_port", guest: 443, host: 8080, host_ip: "127.0.0.1"
 
@@ -32,7 +31,7 @@ Vagrant.configure("2") do |config|
     v.name = "Malcolm"
     # vb.customize ["modifyvm", :id, "--cpuexecutioncap", "80"]  
     v.memory = 32000
-    v.cpus = 4
+    v.cpus = 6
     v.customize ["modifyvm", :id, "--ioapic", "on"]
 
     v.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
@@ -44,6 +43,7 @@ Vagrant.configure("2") do |config|
   # 2. If the VAGRANT_DEFAULT_PROVIDER environmental variable is set, it takes next priority and will be the provider chosen.
   # 3. Vagrant will go through all of the config.vm.provider calls in the Vagrantfile and try each in order. It will choose the first provider that is usable. For example, if you configure Hyper-V, it will never be chosen on Mac this way. It must be both configured and usable.
 
+  # NAT is not working for vmware-desktop at the moment
   config.vm.provider "vmware_desktop" do |desktop, override|    
     override.vm.box = "generic/ubuntu2004"
     desktop.force_vmware_license = "workstation"
@@ -53,8 +53,8 @@ Vagrant.configure("2") do |config|
     desktop.port_forward_network_pause = 5
   end
 
-  config.vm.provider :libvirt do |libvirt, override|
-    override.vm.box = "generic/ubuntu2004"
+  # connect to libvirt VM with dhcp assigned IP address, this will be displayed in the vagrant up command output
+  config.vm.provider :libvirt do |libvirt|
     libvirt.memory = 32000
     libvirt.cpus = 4
   end

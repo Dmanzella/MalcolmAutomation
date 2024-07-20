@@ -185,7 +185,7 @@
     - name: move pcaps specified in config.json to Malcolm
       changed_when: false 
       ansible.builtin.shell:
-        cmd: mv /vagrant/Tests/* /Malcolm/pcap/upload/
+        cmd: mv /vagrant/tests/* /Malcolm/pcap/upload/
 
     # Logstash tasks are there to verify that Malcolm is ready for pcaps to be ingested
     - name: Creating script to wait for logstash
@@ -257,8 +257,8 @@
 
           NUMERIC_REGEX='^[0-9]+$'
           PCAP_PROCESS_PRE_WAIT=30
-          PCAP_PROCESS_IDLE_SECONDS=60
-          PCAP_PROCESS_IDLE_MAX_SECONDS=3600
+          PCAP_PROCESS_IDLE_SECONDS=80
+          PCAP_PROCESS_IDLE_MAX_SECONDS=4600
 
           if (( $PCAP_PROCESS_IDLE_SECONDS > 0 )); then
             # wait for processing to finish out (count becomes "idle", no longer increasing)
@@ -287,7 +287,7 @@
                 if (( $LAST_LOG_COUNT == $NEW_LOG_COUNT )); then
                   # the count hasn't changed, so compare against how long we've been idle
                   if (( ($NEW_LOG_COUNT_TIME - $LAST_LOG_COUNT_CHANGED_TIME) >= $PCAP_PROCESS_IDLE_SECONDS )); then
-                    [[ -n -v ]] && echo "Idle state reached ($NEW_LOG_COUNT logs for at lease $PCAP_PROCESS_IDLE_SECONDS seconds)" >&2
+                    [[ -n -v ]] && echo "Idle state reached ($NEW_LOG_COUNT logs for at least $PCAP_PROCESS_IDLE_SECONDS seconds)" >&2
                     break
                   fi
 
@@ -311,7 +311,7 @@
       ansible.builtin.command:
         cmd: "chmod +x /Malcolm/scripts/processing_check.sh"
 
-    - name: run processing_check.sh (This will take upwards of 15 minutes depending on how large and how many pcaps have been ingested)
+    - name: run processing_check.sh (This will take a very long time depending on how large the pcaps are and how powerful your vm is)
       changed_when: false 
       ansible.builtin.command:
         chdir: /Malcolm/scripts
