@@ -10,12 +10,13 @@ GREEN='\033[0;32m'
 NC='\033[0m'
 
 TAGS=()
+VM_NAME="MalcolmAutomation_Malcolm"
 
 VBOX=0
 VMWARE=0
 LIBVIRT=0
 
-echo "Who do you want to build your Malcolm VM (must already be installed and configured with setup script)"
+echo "Who do you want to build your Malcolm VM (must already be installed and configured with setup script) Note: Virtualbox is recommended"
 echo "1. VirtualBox"
 echo "2. VMware"
 echo "3. libvirt"
@@ -120,12 +121,9 @@ for pcap in "${pcaps_to_test[@]}"; do
     fi
 done
 
-#this array stores the tags of the pcaps run during this test. Use this for the api calls and what files to commpare against.
-# for tag in "${TAGS[@]}"; do 
-#     echo "tag: $tag"
-# done
+# need to find a way to grab the ip address to use to reach the libvirt vm
+if [ $LIBVIRT -eq 1 ]; then  
 
-if [ $LIBVIRT -eq 1 ]; then    
     sudo vagrant up --provider libvirt
 
     if [ $? -ne 0 ]; then
@@ -133,7 +131,38 @@ if [ $LIBVIRT -eq 1 ]; then
         exit 1 
     fi
 
-    curl -k --location 'https://localhost:8080/mapi/ping' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > results/ping.json
+    if sudo vagrant status | grep "running" &> /dev/null; then
+        # Prompt the user to run `sudo vagrant provision`
+        read -p "Vagrant VM is already running. Do you want to rerun provisioner? [y/n]: " answer
+        if [ "$answer" = "y" ]; then
+            
+            read -p "Do you want to skip rebuilding Malcolm? [y/n]: " skip_build_answer
+            if [ "$skip_build_answer" = "y" ]; then
+                # Set SKIP_BUILD to 1 in the playbook
+                sed -i '/^ *SKIP_BUILD:/ s/[0-9][0-9]*/1/' playbook.yml
+            else
+                # Set SKIP_BUILD to 0 in the playbook
+                sed -i '/^ *SKIP_BUILD:/ s/[0-9][0-9]*/0/' playbook.yml
+            fi
+
+            # resync shared folder so vm knows what tests to run from our host
+            sudo vagrant rsync
+            
+            # rerun playbook
+            sudo vagrant provision
+
+            # cleanup for future runs so it will build again
+            sed -i '/^ *SKIP_BUILD:/ s/[0-9][0-9]*/0/' playbook.yml
+
+        fi
+    fi
+
+    # I can use localhost interafec now instead of IP
+    LIBVIRT_IP=$(virsh domifaddr $VM_NAME | awk '/ipv4/ {print $4}' | head -n 1 | cut -d'/' -f1)
+    echo "Libvirt IP is $LIBVIRT_IP"
+
+    # Ping Check
+    curl -k --location "https://localhost:8080/mapi/ping" --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > results/ping.json 2>/dev/null
     if [ -f "pcaps/checks/ping.json" ] && [ -f "results/ping.json" ]; then
         diff "pcaps/checks/ping.json" "results/ping.json" > /dev/null
         if [ $? -eq 0 ]; then
@@ -146,12 +175,28 @@ if [ $LIBVIRT -eq 1 ]; then
         echo -e "${RED}Error: Missing check file or result file for tag '${tag}'.${NC}"
     fi
 
+
     #This loop will do an api call for each tag (pcap) ingested during the test
     for tag in "${TAGS[@]}"; do 
-        echo "in progress"
-        # curl -k --location 'https://localhost:6001/mapi/agg/user_agent.original?from=1970' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt'
 
+        # This pulls every session in arkime with the specified tag, loops through all tags used for this test
+        # Also removes recordsFiltered data as it changes based on how many pcaps were ingested which would break our tests
+        curl -k --location "https://localhost:8080/arkime/api/sessions?expression=tags%3d%3d${tag}&date=-1" --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > results/${tag}.json 2>/dev/null
 
+        recordsFiltered=$(jq -r '.recordsFiltered' "results/${tag}.json")
+
+        if ! [[ $recordsFiltered =~ ^[0-9]+$ ]]; then
+            echo -e "${RED}Error: recordsFiltered is not a valid integer in results/${tag}.json.${NC}"
+            continue
+        fi
+
+        expected=$(cat "pcaps/checks/$tag.txt")
+
+        if [ "$recordsFiltered" -eq "$expected" ]; then 
+            echo -e "${GREEN}$tag test was successful, recordsFiltered value matches the expected value${NC}"
+        else
+            echo -e "${RED}$tag test failed, recordsFiltered value ($recordsFiltered) does not match the expected value ($expected)${NC}"
+        fi
 
     done
 
@@ -164,7 +209,15 @@ fi
 
 if [ $VBOX -eq 1 ]; then
     # kick off our Malcolm VM getting built
-    # sudo vagrant up --provider virtualbox
+    sudo vagrant up --provider virtualbox
+
+    if sudo vagrant status | grep "running" &> /dev/null; then
+        # Prompt the user to run `sudo vagrant provision`
+        read -p "Vagrant VM is already running. Do you want to rerun provisioner? [y/n]: " answer
+        if [ "$answer" = "y" ]; then
+            sudo vagrant provision
+        fi
+    fi
 
     if [ $? -ne 0 ]; then
         echo -e "${RED}Error: Failed to start the Vagrant VM or Ansible playbook failed.${NC}"
@@ -172,7 +225,7 @@ if [ $VBOX -eq 1 ]; then
     fi
 
     # Ping Check
-    curl -k --location 'https://localhost:8080/mapi/ping' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > results/ping.json
+    curl -k --location 'https://localhost:8080/mapi/ping' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > results/ping.json 2>/dev/null
     if [ -f "pcaps/checks/ping.json" ] && [ -f "results/ping.json" ]; then
         diff "pcaps/checks/ping.json" "results/ping.json" > /dev/null
         if [ $? -eq 0 ]; then
@@ -188,18 +241,24 @@ if [ $VBOX -eq 1 ]; then
 
     #This loop will do an api call for each tag (pcap) ingested during the test
     for tag in "${TAGS[@]}"; do 
-        echo "in progress"
 
         # This pulls every session in arkime with the specified tag, loops through all tags used for this test
-        # Also removes recordsTotal data as it changes based on how many pcaps were ingested which would break our tests
-        curl -k --location "https://localhost:8080/arkime/api/sessions?expression=tags%3d%3d${tag}&date=-1" --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > results/${tag}.json
-        sed -i 's/"recordsTotal":[0-9]*,//' "results/$tag.json"
+        # Also removes recordsFiltered data as it changes based on how many pcaps were ingested which would break our tests
+        curl -k --location "https://localhost:8080/arkime/api/sessions?expression=tags%3d%3d${tag}&date=-1" --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > results/${tag}.json 2>/dev/null
 
-        if diff --ignore-trailing-space pcaps/checks/$tag.json results/$tag.json &>/dev/null; then 
-            echo -e "${GREEN}$tag test was successful${NC}"
+        recordsFiltered=$(jq -r '.recordsFiltered' "results/${tag}.json")
+
+        if ! [[ $recordsFiltered =~ ^[0-9]+$ ]]; then
+            echo -e "${RED}Error: recordsFiltered is not a valid integer in results/${tag}.json.${NC}"
+            continue
+        fi
+
+         expected=$(cat "pcaps/checks/$tag.txt")
+
+        if [ "$recordsFiltered" -eq "$expected" ]; then 
+            echo -e "${GREEN}$tag test was successful, recordsFiltered value matches the expected value${NC}"
         else
-            echo -e "${RED}$tag test failed${NC}"
-            diff --ignore-trailing-space pcaps/checks/$tag.json results/$tag.json
+            echo -e "${RED}$tag test failed, recordsFiltered value ($recordsFiltered) does not match the expected value ($expected)${NC}"
         fi
 
     done

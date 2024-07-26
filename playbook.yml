@@ -1,11 +1,11 @@
-
 - hosts: all
   become: yes
 
-  # CompleteTest.sh will walk user through setting these variables
+  # CompleteTest.sh will walk user through setting these variables correctly
   vars:
     MALCOLM_REPO: 'https://github.com/cisagov/Malcolm.git'
     MALCOLM_VERSION: ''
+    SKIP_BUILD: 1
 
   tasks:
 
@@ -17,6 +17,7 @@
         name: aptitude
         state: latest
         update_cache: true
+      when: SKIP_BUILD == 0
 
     - name: "Installing Packages"
       changed_when: false
@@ -33,6 +34,7 @@
           - dialog
         state: latest
         update_cache: true
+      when: SKIP_BUILD == 0
 
     - name: Add Docker's official GPG key
       retries: 3
@@ -40,12 +42,15 @@
       apt_key:
         url: https://download.docker.com/linux/ubuntu/gpg
         state: present
+      when: SKIP_BUILD == 0
+
 
     - name: Add Docker repository
       changed_when: false
       apt_repository:
         repo: deb https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} stable
         state: present
+      when: SKIP_BUILD == 0
 
     - name: Install Docker and related packages
       changed_when: false
@@ -59,6 +64,7 @@
         - docker-compose-plugin         
         state: present
         update_cache: true
+      when: SKIP_BUILD == 0
 
     - name: install python packages
       changed_when: false
@@ -69,7 +75,8 @@
           - pyyaml
           - pythondialog
           - urllib3
-          - docker  
+          - docker
+      when: SKIP_BUILD == 0  
 
     # if malcom version is specified, then pull specific malcolm version
     - name: Git Clone Malcolm (specific version)
@@ -83,7 +90,9 @@
         # Use version to specify if a certain branch of Malcolm is what you want
         # should add functionality to comment this out if no repo_selector version is specified
         version: "{{ MALCOLM_VERSION }}"
-      when: MALCOLM_VERSION != ''
+      when: 
+        - MALCOLM_VERSION != ''
+        - SKIP_BUILD == 0
 
     # if no version is specified, then omit the version field and pull the latest release
     - name: Git Clone Malcolm (latest version)
@@ -94,7 +103,9 @@
         clone: true
         dest: /Malcolm
         force: true
-      when: MALCOLM_VERSION == ''
+      when: 
+        - MALCOLM_VERSION == ''
+        - SKIP_BUILD == 0
 
       # uses the builtin Malcolm helper script to retag so we can build older versions with no modification
       # only run if specific version is used, I believe running it on the latest version breaks it
@@ -103,7 +114,9 @@
       ansible.builtin.shell:
         chdir: /Malcolm/scripts
         cmd: "./github_image_helper.sh 4"
-      when: MALCOLM_VERSION != ''
+      when: 
+        - MALCOLM_VERSION != ''
+        - SKIP_BUILD == 0
 
     - name: change owner of Malcolm to vagrant user 
       become: true
@@ -111,6 +124,7 @@
       shell:
         chdir: /Malcolm
         cmd: "chown -R vagrant:vagrant ."
+      when: SKIP_BUILD == 0
 
     - name: Run install.py as vagrant (if this fails, its probably due to a new version having different command line arguments, you might need to update the arguments for this script)
       become_user: vagrant
@@ -118,6 +132,7 @@
       ansible.builtin.shell:
         chdir: /Malcolm/scripts
         cmd: ./install.py --defaults --restart-malcolm
+      when: SKIP_BUILD == 0
 
     #### Works now after removing only the "--netbox-preload-prefixes"
     - name: Run configure script (if this fails, its probably due to a new version of Malcolm having different command line arguments, you might need to update the arguments for this script)
@@ -130,30 +145,35 @@
         
         # works for 23.12.1
         # cmd: "python3 /Malcolm/scripts/configure --defaults --auto-arkime --auto-suricata --auto-zeek --zeek-ics --zeek-ics-best-guess --auto-oui --auto-freq"
+      when: SKIP_BUILD == 0
 
     - name: add vagrant as docker user
       become: true
       changed_when: false
       ansible.builtin.shell:
         cmd: usermod -a -G docker vagrant
+      when: SKIP_BUILD == 0
 
     - name: add root as docker user
       become: true
       changed_when: false
       ansible.builtin.command:
         cmd: usermod -a -G docker root
+      when: SKIP_BUILD == 0
 
     - name: workaround for docker
       become: true
       changed_when: false
       ansible.builtin.command:
         cmd: chmod 666 /var/run/docker.sock
+      when: SKIP_BUILD == 0
       
     - name: restart docker
       become: true
       changed_when: false
       ansible.builtin.command:
         cmd: systemctl restart docker
+      when: SKIP_BUILD == 0
 
     - name: configure auth_setup (if this fails, its probably due to a new version having different command line arguments, you might need to update the arguments for this script)
       become_user: vagrant
@@ -161,13 +181,16 @@
       ansible.builtin.shell:
         chdir: /Malcolm/scripts/
         cmd: "./auth_setup --auth-noninteractive --auth-admin-username analyst --auth-admin-password-openssl '$1$owXoS5pf$YesZKhhWS0d3zVUUhdcef0' --auth-admin-password-htpasswd '$2y$05$a8jiJsLZ1mFnt5srJD3HAOKC8IUaZcOlsqp8txBlmMjW6wUXUtN3S' --auth-generate-webcerts --auth-generate-fwcerts --auth-generate-netbox-passwords"
+      when: SKIP_BUILD == 0
 
     - name: Pull Malcolm docker containers (This will take a few minutes...longer on a slow network)
       become: true
+      retries: 3
       changed_when: false
       shell:
         chdir: /Malcolm
         cmd: "docker compose --profile malcolm pull"
+      when: SKIP_BUILD == 0
 
     - name: start malcolm (will take a few minutes)
       become_user: vagrant
@@ -177,10 +200,13 @@
       args:
         chdir: /Malcolm/scripts
         cmd: ./start
+      when: SKIP_BUILD == 0
 
     ###########################################################################################################################################
     ### Start of testing phase of playbook, time to upload and test pcaps in malcolm. Need to figure out how I want to make this extensible ###
     ###########################################################################################################################################
+
+    ## Can now skip the build if you want to keep a VM but rerun new test pcaps
 
     - name: move pcaps specified in config.json to Malcolm
       changed_when: false 
@@ -213,41 +239,10 @@
         chdir: /Malcolm/scripts
         cmd: ./logstash_wait.sh
 
-    #  This is the tagging task, modify as needed for tests. Currently I am indexing every pcap so each has a unique number to reference it
-    #  The very first tag is not given a number... need to fix this, the second pcap starts at 1 and the each one counts up
-    # - name: create script that indexes all test pcap files in a directory, for each test level
-    #   changed_when: false
-    #   ansible.builtin.copy:
-    #     dest:  /Malcolm/scripts/pcap_indexer.sh
-    #     content: |
-    #       #!/bin/bash
-
-    #       INDEX = 1
-
-    #       for file in /pcaps/pcaps/*.pcap; do
-    #           filename=$(basename "$file" .pcap)
-    #           new_filename="tag$INDEX,${filename}.pcap"
-
-    #           mv "$file" /Malcolm/pcap/upload/"$new_filename"
-    #           ((INDEX++))
-    #       done
-
-    # - name: make pcap_indexer.sh executable
-    #   become: true
-    #   changed_when: false
-    #   ansible.builtin.shell:
-    #     cmd: chmod +x /Malcolm/scripts/pcap_indexer.sh
-
-    # - name: run pcap_indexer.sh
-    #   changed_when: false
-    #   become: true
-    #   ansible.builtin.shell:
-    #     chdir: /Malcolm/scripts
-    #     cmd: ./pcap_indexer.sh
-
     # this script waits for log count to remain idle (checking if all pcaps have been ingested)
     # stolen from Seth in the Malcolm scripts directory
     # This will obviously take a lot of time if many pcaps are ingested, so keep that in mind when uploading pcaps
+    # The wait times might need to still be tweaked, there have been a few cases of the script exiting before all the pcaps are ingested
     - name: create seth's Malcolm processing checker
       changed_when: false
       ansible.builtin.copy:
@@ -257,8 +252,8 @@
 
           NUMERIC_REGEX='^[0-9]+$'
           PCAP_PROCESS_PRE_WAIT=30
-          PCAP_PROCESS_IDLE_SECONDS=80
-          PCAP_PROCESS_IDLE_MAX_SECONDS=4600
+          PCAP_PROCESS_IDLE_SECONDS=120
+          PCAP_PROCESS_IDLE_MAX_SECONDS=4800
 
           if (( $PCAP_PROCESS_IDLE_SECONDS > 0 )); then
             # wait for processing to finish out (count becomes "idle", no longer increasing)
@@ -316,77 +311,4 @@
       ansible.builtin.command:
         chdir: /Malcolm/scripts
         cmd: ./processing_check.sh
-
-    ## start testing with api calls....need to figure out the framework for this
-    # ## Also should come up with a naming scheme for the pcaps 
     
-    - name: make api testing dir (okay if this fails)
-      ignore_errors: true
-      changed_when: false
-      ansible.builtin.command:
-        cmd: mkdir /ApiTesting
-
-    # - name: api call to ping 
-    #   changed_when: false
-    #   ansible.builtin.shell:
-    #     chdir: /ApiTesting
-    #     cmd: "curl -k --location 'https://localhost/mapi/ping' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > ping.json"
-
-    ###
-    ### These are some example api calls you can make to Malcolm
-    ### 
-
-    # - name: api call to fields
-    #   changed_when: false
-    #   ansible.builtin.shell:
-    #     chdir: /ApiTesting
-    #     cmd: "curl -k --location 'https://localhost/mapi/fields' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > fields.json"
-
-    # - name: api call to indices
-    #   changed_when: false
-    #   ansible.builtin.shell:
-    #     chdir: /ApiTesting
-    #     cmd: "curl -k --location 'https://localhost/mapi/indices' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > indices.json" 
-    
-    # - name: api call to version
-    #   changed_when: false
-    #   ansible.builtin.shell:
-    #     chdir: /ApiTesting 
-    #     cmd: "curl -k --location 'https://localhost/mapi/version' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > version.json"
-
-    # - name: api call to agg for user agents
-    #   changed_when: false
-    #   ansible.builtin.shell:
-    #     chdir: /ApiTesting
-    #     cmd: "curl -k --location 'https://localhost/mapi/agg/user_agent.original?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > user_agent.json"
-
-    # - name: api call to agg for protocols
-    #   changed_when: false
-    #   ansible.builtin.shell:
-    #     chdir: /ApiTesting
-    #     cmd: "curl -k --location 'https://localhost/mapi/agg/network.transport,network.protocol,network.protocol_version?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > protocols.json"
-
-    # - name: api call to agg for software-properties-common
-    #   changed_when: false
-    #   ansible.builtin.shell:
-    #     chdir: /ApiTesting
-    #     cmd: "curl -k --location 'https://localhost/mapi/agg/zeek.software.name,zeek.software.unparsed_version?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > software.json"
-
-    # - name: api call to agg for notice categories
-    #   changed_when: false
-    #   ansible.builtin.shell:
-    #     chdir: /ApiTesting
-    #     cmd: "curl -k --location 'https://localhost/mapi/agg/zeek.notice.category,zeek.notice.sub_category?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > notice_catrgories.json"
-
-    # - name: api call to agg for severity tags
-    #   changed_when: false
-    #   ansible.builtin.shell:
-    #     chdir: /ApiTesting
-    #     cmd: "curl -k --location 'https://localhost/mapi/agg/event.severity_tags?from=20%20years%20ago' --header 'Authorization: Basic YW5hbHlzdDpNQGxjMGxt' > severity_tags.json"
-
-    - name: chown api data to vagrant so we can scp them from host
-      changed_when: false
-      become: true
-      ansible.builtin.command:
-        chdir: /ApiTesting
-        cmd: "chown -R vagrant:vagrant ."

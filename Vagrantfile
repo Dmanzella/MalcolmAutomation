@@ -14,13 +14,12 @@ Vagrant.configure("2") do |config|
   config.vm.box_version = "202309.08.0"
   config.vm.disk :disk, size: "150GB", primary: true
   config.vm.hostname = "Malcolm"
+  config.vm.define "Malcolm"
   config.vm.box_download_insecure = true
 
   # config.vm.synced_folder ".", "/vagrant", type: "nfs", mount_options: ["vers=3,tcp"]
 
   ## If using Virtualbox Provider, you will access Malcolm VM Web interaface on https://localhost:8080
-  ## Have not figured out a standardized way to connect to libvirt vm web interface, still looking. Currenlty need to use it dhcp assigned IP to access web interface from your host.
-
   config.ssh.insert_key = false
 
   config.vm.network "private_network", type: "dhcp"
@@ -48,15 +47,14 @@ Vagrant.configure("2") do |config|
     override.vm.box = "generic/ubuntu2004"
     desktop.force_vmware_license = "workstation"
     desktop.vmx["memsize"] = "32000"
-    desktop.vmx["numvcpus"] = "4" 
+    desktop.vmx["numvcpus"] = "6" 
     desktop.gui = true
     desktop.port_forward_network_pause = 5
   end
-
-  # connect to libvirt VM with dhcp assigned IP address, this will be displayed in the vagrant up command output
+  
   config.vm.provider :libvirt do |libvirt|
     libvirt.memory = 32000
-    libvirt.cpus = 4
+    libvirt.cpus = 6
   end
 
   #set everything else up with ansible

@@ -17,6 +17,9 @@ packages=(
     jq
 )
 
+# required to resync folder to rerun tests on already running vm
+sudo vagrant plugin install vagrant-rsync-back
+
 # install dependency list
 for package in "${packages[@]}"; do
     if is_package_installed "$package"; then
@@ -27,7 +30,7 @@ for package in "${packages[@]}"; do
     fi
 done
 
-echo "Which VM provider do you want to use with Vagrant and install?"
+echo "Which VM provider do you want to use with Vagrant and install? Note: Virtualbox is the fastest and most stable"
 echo "1. VirtualBox"
 echo "2. VMware"
 echo "3. libvirt"
@@ -41,11 +44,6 @@ case $choice in
         then
             echo "installing Virtualbox..."
             sudo apt-get install -y virtualbox
-        fi
-
-        if ! command -v net-tools &> /dev/null
-        then
-            sudo apt-get install -y sshpass
         fi
         ;;
     2)
