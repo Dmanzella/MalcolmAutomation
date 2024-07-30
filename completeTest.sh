@@ -124,13 +124,6 @@ done
 # need to find a way to grab the ip address to use to reach the libvirt vm
 if [ $LIBVIRT -eq 1 ]; then  
 
-    sudo vagrant up --provider libvirt
-
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}Error: Failed to start the Vagrant VM or Ansible playbook failed.${NC}"
-        exit 1 
-    fi
-
     if sudo vagrant status | grep "running" &> /dev/null; then
         # Prompt the user to run `sudo vagrant provision`
         read -p "Vagrant VM is already running. Do you want to rerun provisioner? [y/n]: " answer
@@ -155,6 +148,13 @@ if [ $LIBVIRT -eq 1 ]; then
             sed -i '/^ *SKIP_BUILD:/ s/[0-9][0-9]*/0/' playbook.yml
 
         fi
+    else
+        sudo vagrant up --provider libvirt
+    fi
+
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}Error: Failed to start the Vagrant VM or Ansible playbook failed.${NC}"
+        exit 1 
     fi
 
     # I can use localhost interafec now instead of IP
@@ -202,21 +202,39 @@ if [ $LIBVIRT -eq 1 ]; then
 
 fi
 
-# not working as of now
+# not working as of now, dont use this
 if [ $VMWARE -eq 1 ]; then    
     sudo vagrant up --provider vmware_desktop
 fi
 
 if [ $VBOX -eq 1 ]; then
-    # kick off our Malcolm VM getting built
-    sudo vagrant up --provider virtualbox
 
     if sudo vagrant status | grep "running" &> /dev/null; then
         # Prompt the user to run `sudo vagrant provision`
-        read -p "Vagrant VM is already running. Do you want to rerun provisioner? [y/n]: " answer
+        read -p "Vagrant VM is already running. Do you want to rerun provisioner? Note: if you reupload the same pcaps multiple times, the tests will fail as it is only expecting 1 of each pcap, adjust your config.json file each rerun [y/n]: " answer
         if [ "$answer" = "y" ]; then
+            
+            read -p "Do you want to skip rebuilding Malcolm? (skip if Malcolm is already built and you want to rerun and test new pcaps) [y/n]: " skip_build_answer
+            if [ "$skip_build_answer" = "y" ]; then
+                # Set SKIP_BUILD to 1 in the playbook
+                sed -i '/^ *SKIP_BUILD:/ s/[0-9][0-9]*/1/' playbook.yml
+            else
+                # Set SKIP_BUILD to 0 in the playbook
+                sed -i '/^ *SKIP_BUILD:/ s/[0-9][0-9]*/0/' playbook.yml
+            fi
+
+            # resync shared folder so vm knows what tests to run from our host
+            sudo vagrant rsync
+            
+            # rerun playbook
             sudo vagrant provision
+
+            # cleanup for future runs so it will build again
+            sed -i '/^ *SKIP_BUILD:/ s/[0-9][0-9]*/0/' playbook.yml
+
         fi
+    else 
+        sudo vagrant up --provider virtualbox
     fi
 
     if [ $? -ne 0 ]; then
@@ -253,7 +271,7 @@ if [ $VBOX -eq 1 ]; then
             continue
         fi
 
-         expected=$(cat "pcaps/checks/$tag.txt")
+        expected=$(cat "pcaps/checks/$tag.txt")
 
         if [ "$recordsFiltered" -eq "$expected" ]; then 
             echo -e "${GREEN}$tag test was successful, recordsFiltered value matches the expected value${NC}"

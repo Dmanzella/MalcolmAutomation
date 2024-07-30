@@ -1,13 +1,8 @@
 {
   "pcaps_to_test": [
-    "BSAP.pcap",
-    "DCERPC.pcap",
-    "DHCP.pcap",
-    "DNP3.pcap",
-    "DNS.pcap",
-    "ENIP.pcap",
-    "ETHERCAT.pcap",
-    "FTP.pcap",
-    "GENISYS.pcap"
+    "Telnet.pcap",
+    "TFTP.pcap",
+    "Tunnels.pcap",
+    "WireGuard.pcap"
   ]
 }

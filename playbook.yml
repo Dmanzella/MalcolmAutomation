@@ -5,7 +5,7 @@
   vars:
     MALCOLM_REPO: 'https://github.com/cisagov/Malcolm.git'
     MALCOLM_VERSION: ''
-    SKIP_BUILD: 1
+    SKIP_BUILD: 0
 
   tasks:
 
@@ -208,8 +208,9 @@
 
     ## Can now skip the build if you want to keep a VM but rerun new test pcaps
 
-    - name: move pcaps specified in config.json to Malcolm
+    - name: move pcaps specified in config.json to Malcolm (will fail if no pcaps are in config.json)
       changed_when: false 
+      ignore_errors: true
       ansible.builtin.shell:
         cmd: mv /vagrant/tests/* /Malcolm/pcap/upload/
 
