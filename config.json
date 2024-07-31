@@ -1,8 +1,7 @@
 {
   "pcaps_to_test": [
-    "Telnet.pcap",
-    "TFTP.pcap",
-    "Tunnels.pcap",
-    "WireGuard.pcap"
+    "BACnet.pcap",
+    "BSAP.pcap",
+    "DCERPC.pcap"
   ]
 }

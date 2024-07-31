@@ -150,11 +150,11 @@ if [ $LIBVIRT -eq 1 ]; then
         fi
     else
         sudo vagrant up --provider libvirt
-    fi
 
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}Error: Failed to start the Vagrant VM or Ansible playbook failed.${NC}"
-        exit 1 
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}Error: Failed to start the Vagrant VM or Ansible playbook failed.${NC}"
+            exit 1 
+        fi
     fi
 
     # I can use localhost interafec now instead of IP
@@ -235,11 +235,11 @@ if [ $VBOX -eq 1 ]; then
         fi
     else 
         sudo vagrant up --provider virtualbox
-    fi
 
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}Error: Failed to start the Vagrant VM or Ansible playbook failed.${NC}"
-        exit 1 
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}Error: Failed to start the Vagrant VM or Ansible playbook failed.${NC}"
+            exit 1 
+        fi
     fi
 
     # Ping Check
